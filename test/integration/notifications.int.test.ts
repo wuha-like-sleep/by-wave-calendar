@@ -25,7 +25,7 @@ process.env.SESSION_SECRET ??= "0123456789abcdef0123456789abcdef0123456789";
 const { webRoutes } = await import("../../src/web/index.js");
 const { notificationRoutes } = await import("../../src/routes/notifications.js");
 const { availableSlots, bookSlot, cancelBooking } = await import("../../src/lib/booking.js");
-const { makeT, LOCALES, SITE_LOCALE_OPTIONS } = await import("../../src/lib/i18n.js");
+const { makeT, localeOptionLabel, LOCALES, SITE_LOCALE_OPTIONS } = await import("../../src/lib/i18n.js");
 const { env } = await import("../../src/env.js");
 const { jsonForScript } = await import("../../src/lib/script_json.js");
 
@@ -47,6 +47,7 @@ beforeAll(async () => {
     defaultContext: {
       t: makeT("zh-CN"), siteName: "ByWave", siteLogoUrl: null, icpNumber: null, icpUrl: "",
       assetVersion: "t", jsBasePath: "/static/js", cspNonce: "n", currentLocale: "zh-CN", locales: LOCALES,
+      localeLabel: (entry: (typeof LOCALES)[number], gloss = false) => localeOptionLabel(entry, "zh-CN", gloss),
       siteLocaleOptions: SITE_LOCALE_OPTIONS, siteDefaultLocale: "zh-CN",
       sitePalette: "indigo", siteDensity: "comfortable", themeMode: "system", currentUser: null,
       registrationOpen: true, registrationMode: "open", ssoEnabled: false, ssoLabel: "", ssoProviders: [],

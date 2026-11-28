@@ -9,6 +9,7 @@
 // device-beta 桶 7、device-alpha 桶 73；desktop versionCode=31 时
 // 11111111-… 桶 64。
 
+import { makeT } from "../../src/lib/i18n.js";
 import { vi, beforeAll, beforeEach, afterEach, afterAll, describe, it, expect } from "vitest";
 
 vi.mock("../../src/db/client.js", async () => {
@@ -51,7 +52,7 @@ async function buildApp(): Promise<FastifyInstance> {
   await instance.register(view, {
     engine: { ejs }, root: VIEWS, propertyName: "view", options: { async: false },
     defaultContext: {
-      t: (key: string) => key, siteName: "ByWave Calendar", siteLogoUrl: null,
+      t: makeT("zh-CN"), siteName: "ByWave Calendar", siteLogoUrl: null,
       icpNumber: null, icpUrl: "", assetVersion: "test", jsBasePath: "/static/js",
       cspNonce: "test-nonce", currentLocale: "zh-CN", locales: [], siteLocaleOptions: [],
       currentUser: null, themePalette: "indigo", themeDensity: "comfortable",

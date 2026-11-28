@@ -100,6 +100,146 @@
   };
 })();
 
+// Event times are instants; all-day values are floating civil dates. The editor
+// captures its display zone so a device change cannot reinterpret an open draft.
+(function () {
+  "use strict";
+  const formats = new Map();
+  function formatter(locale, zone, options) {
+    const key = JSON.stringify([locale, zone, options]);
+    if (!formats.has(key)) {
+      if (formats.size >= 128) formats.delete(formats.keys().next().value);
+      formats.set(key, new Intl.DateTimeFormat(locale, { timeZone: zone, ...options }));
+    }
+    return formats.get(key);
+  }
+  function validZone(value) {
+    try { return typeof value === "string" && value.trim() ? formatter("en", value.trim(), {}).resolvedOptions().timeZone : null; }
+    catch (_) { return null; }
+  }
+  function browserZone() { return validZone(Intl.DateTimeFormat().resolvedOptions().timeZone) || "UTC"; }
+  function date(value) { return new Date(value && typeof value.toDate === "function" ? value.toDate() : value); }
+  function parts(value, zone) {
+    return Object.fromEntries(formatter("en-CA", zone, {
+      year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23",
+    }).formatToParts(date(value)).filter(p => p.type !== "literal").map(p => [p.type, p.value]));
+  }
+  function inputValue(value, zone) {
+    const d = date(value), p = parts(d, zone), ms = d.getUTCMilliseconds();
+    return `${p.year}-${p.month}-${p.day}T${p.hour}:${p.minute}` + (p.second !== "00" || ms ? `:${p.second}` : "") + (ms ? `.${String(ms).padStart(3, "0")}` : "");
+  }
+  function offset(value, zone) {
+    const d = date(value), p = parts(d, zone);
+    return Date.UTC(+p.year, +p.month - 1, +p.day, +p.hour, +p.minute, +p.second) - (+d - d.getUTCMilliseconds());
+  }
+  function offsetLabel(value, zone, locale) {
+    return formatter(locale, zone, { timeZoneName: "longOffset" }).formatToParts(date(value)).find(p => p.type === "timeZoneName").value;
+  }
+  function localCandidates(value, zone) {
+    const match = /^(\d{4})-(\d\d)-(\d\d)T(\d\d):(\d\d)(?::(\d\d)(?:\.(\d{1,3}))?)?$/.exec(String(value));
+    if (!match || !validZone(zone)) return [];
+    const [, y, m, d, h, minute, second = "00", fraction = ""] = match;
+    const ms = Number(fraction.padEnd(3, "0"));
+    const wall = Date.UTC(+y, +m - 1, +d, +h, +minute, +second, ms);
+    const expected = `${y}-${m}-${d}T${h}:${minute}:${second}.${String(ms).padStart(3, "0")}`;
+    const offsets = new Set([-172800000, -86400000, 0, 86400000, 172800000].map(delta => offset(wall + delta, zone)));
+    return [...offsets].map(o => new Date(wall - o)).filter(candidate => {
+      const p = parts(candidate, zone);
+      return `${p.year}-${p.month}-${p.day}T${p.hour}:${p.minute}:${p.second}.${String(candidate.getUTCMilliseconds()).padStart(3, "0")}` === expected;
+    }).sort((a, b) => a - b);
+  }
+  function resolveInput(value, zone, preferred) {
+    const candidates = localCandidates(value, zone);
+    if (!candidates.length) throw new Error("invalid_local_time");
+    return candidates.find(candidate => +candidate === +date(preferred)) || candidates[0];
+  }
+  function allDayDates(start, end) {
+    const first = date(start), last = date(end);
+    const exclusive = +last > +first && last.toISOString().slice(11) === "00:00:00.000Z";
+    return { start: first.toISOString().slice(0, 10), end: new Date(+last - (exclusive ? 1 : 0)).toISOString().slice(0, 10) };
+  }
+  function zones(event, calendarZone, viewerZone) {
+    const extra = event.extra || {};
+    const start = validZone(extra.timezone) || validZone(calendarZone) || viewerZone;
+    const end = validZone(extra.endTimezone) || start;
+    return { start, end, source: !event.allDay && start === end && start !== validZone(viewerZone) ? start : null, itinerary: !event.allDay && start !== end };
+  }
+  function range(start, end, zone, locale, includeDate = false) {
+    const a = date(start), b = date(end), first = parts(a, zone), last = parts(b, zone);
+    const sameDay = first.year === last.year && first.month === last.month && first.day === last.day;
+    const showDate = includeDate || !sameDay;
+    const options = { hour: "2-digit", minute: "2-digit", hourCycle: "h23", ...(showDate ? { year: "numeric", month: "short", day: "numeric" } : {}) };
+    if (offset(a, zone) !== offset(b, zone)) options.timeZoneName = "shortOffset";
+    return formatter(locale, zone, options).format(a) + " – " + formatter(locale, zone, options).format(b);
+  }
+  function elapsed(start, end, locale) {
+    const millis = +date(end) - +date(start);
+    if (!Number.isFinite(millis) || millis < 0) return "";
+    // Elapsed hours come from absolute instants, never the two source clocks.
+    // Keep hours beyond 24 so a long trip is not mistaken for civil days.
+    const values = [["hour", Math.floor(millis / 3600000)], ["minute", Math.floor(millis % 3600000 / 60000)], ["second", millis % 60000 / 1000]];
+    const parts = values.filter(([, value]) => value > 0);
+    if (!parts.length) parts.push(["minute", 0]);
+    return parts.map(([unit, value]) => new Intl.NumberFormat(locale, { style: "unit", unit, unitDisplay: "long", maximumFractionDigits: 3 }).format(value)).join(" ");
+  }
+  function timeFields(data, snapshot, zone) {
+    const allDay = !!data.allDay;
+    let start, end;
+    if (allDay) {
+      start = new Date(data.startsAtDate + "T00:00:00.000Z");
+      end = new Date(data.endsAtDate + "T23:59:59.999Z");
+      if (snapshot && snapshot.allDay) {
+        if (data.startsAtDate === snapshot.dateStart) start = date(snapshot.start);
+        if (data.endsAtDate === snapshot.dateEnd) end = date(snapshot.end);
+      }
+    } else {
+      start = resolveInput(data.startsAt, typeof zone === "string" ? zone : zone.start, data.startsAtFold || (snapshot && !snapshot.allDay && snapshot.start));
+      end = resolveInput(data.endsAt, typeof zone === "string" ? zone : zone.end, data.endsAtFold || (snapshot && !snapshot.allDay && snapshot.end));
+    }
+    if (!Number.isFinite(+start) || !Number.isFinite(+end) || +end < +start) throw new Error("invalid_time_order");
+    return { startsAt: start.toISOString(), endsAt: end.toISOString() };
+  }
+  function preserveUnchanged(body, snapshot) {
+    if (!snapshot) return body;
+    const sameMode = body.allDay === snapshot.allDay;
+    const sameStart = sameMode && +date(body.startsAt) === +date(snapshot.start);
+    const sameEnd = sameMode && +date(body.endsAt) === +date(snapshot.end);
+    if (sameStart) delete body.startsAt;
+    if (sameEnd) delete body.endsAt;
+    if (body.extra.timezone === snapshot.timezone && (snapshot.storedTimezone || (sameStart && sameEnd && body.calendarId === snapshot.calendarId && !Object.hasOwn(body.extra, "endTimezone")))) delete body.extra.timezone;
+    return body;
+  }
+  function endZoneField(data, snapshot, touched) {
+    const start = validZone(data.timezone);
+    const end = data.separateEndTimeZone ? validZone(data.endTimezone) : null;
+    const explicit = end && end !== start ? end : null;
+    if (!snapshot) return explicit || undefined;
+    if (explicit) return explicit !== validZone(snapshot.endTimezone) ? explicit : undefined;
+    return snapshot.endTimezone && (touched || start !== validZone(snapshot.timezone)) ? null : undefined;
+  }
+  function civilDayStart(day, viewerZone) {
+    const midnight = new Date(day + "T00:00:00.000Z");
+    const target = day + "T00:00";
+    // A civil midnight may be skipped (including a whole date). Choose the
+    // first actual instant on/after it using the offsets on both sides.
+    const offsets = new Set([-172800000, -86400000, 0, 86400000, 172800000].map(delta => offset(+midnight + delta, viewerZone)));
+    const candidates = [...offsets].map(o => new Date(+midnight - o));
+    return Math.min(...candidates.filter(candidate => inputValue(candidate, viewerZone) >= target).map(Number));
+  }
+  function pastEnd(event, viewerZone) {
+    if (!event.allDay) return +date(event.endsAt);
+    const days = allDayDates(event.startsAt, event.endsAt);
+    const nextDay = new Date(days.end + "T00:00:00.000Z");
+    nextDay.setUTCDate(nextDay.getUTCDate() + 1);
+    return civilDayStart(nextDay.toISOString().slice(0, 10), viewerZone);
+  }
+  function eventBounds(event, viewerZone) {
+    return { start: event.allDay ? civilDayStart(allDayDates(event.startsAt, event.endsAt).start, viewerZone) : +date(event.startsAt), end: pastEnd(event, viewerZone) };
+  }
+
+  globalThis.bwcEventTime = { validZone, browserZone, date, parts, inputValue, offsetLabel, localCandidates, resolveInput, allDayDates, zones, range, elapsed, timeFields, preserveUnchanged, endZoneField, pastEnd, eventBounds };
+})();
+
 // ---- 本地地址簿：地点输入的联想来源（纯逻辑，node 里可直接打）----
 // 产品口径：地址只存在本机，靠「用过」一点点攒起来。这一版把簿子做成
 // 正经的结构化条目（IndexedDB 持久化在主 IIFE 里，这一层只管逻辑）：
@@ -623,6 +763,20 @@
     return s;
   };
   const LOCALE = window.BWC_LOCALE || "zh-CN";
+  const eventTime = globalThis.bwcEventTime;
+  let displayZone = eventTime.browserZone();
+  const zoneLabels = new Map((window.bwcTimezones || []).map(z => [z.id, z.label]).reverse());
+  function zoneLabel(zone) { return zoneLabels.get(zone) || zone; }
+  function calendarZone(id) { return ctx.calendars.find(c => c.id === id)?.timezone; }
+  function convertedTimes(event, viewer, includeDate = true) {
+    if (event.allDay) return [];
+    const zones = eventTime.zones(event, calendarZone(event.calendarId), viewer);
+    if (zones.itinerary) return [
+      T("app.js.eventTime.departure", { zone: zoneLabel(zones.start) }) + " · " + eventTime.range(event.startsAt, event.startsAt, zones.start, LOCALE, true).split(" – ")[0] + " · " + eventTime.offsetLabel(event.startsAt, zones.start, LOCALE),
+      T("app.js.eventTime.arrival", { zone: zoneLabel(zones.end) }) + " · " + eventTime.range(event.endsAt, event.endsAt, zones.end, LOCALE, true).split(" – ")[0] + " · " + eventTime.offsetLabel(event.endsAt, zones.end, LOCALE),
+    ];
+    return zones.source ? [T("app.js.eventTime.source", { zone: zoneLabel(zones.source) }) + " · " + eventTime.range(event.startsAt, event.endsAt, zones.source, LOCALE, includeDate)] : [];
+  }
   // Localized month names (index 0 = January) and weekday names starting
   // Sunday, built from Intl so every locale gets its native forms without
   // shipping tables. 2021-08-01 was a Sunday; using local-midnight Dates
@@ -683,7 +837,7 @@
     // Prefer in-progress (start <= now <= end), else soonest upcoming.
     let inProgress = null, nextUp = null;
     for (const e of rawEvents) {
-      const s = +new Date(e.startsAt), en = +new Date(e.endsAt);
+      const { start: s, end: en } = eventTime.eventBounds(e, displayZone);
       if (s <= now && en > now && !inProgress) inProgress = { e, s, en };
       else if (s > now && s < horizonMs && (!nextUp || s < nextUp.s)) nextUp = { e, s, en };
     }
@@ -715,6 +869,12 @@
     const form = $("#form-event");
     if (!form) return;
     const editing = mode === "edit";
+    form.dataset.mode = mode;
+    rebaseEditorZones(form);
+    syncAllDayUI();
+    syncTzHint();
+    $("#event-origin-zone").classList.toggle("hidden", !editing);
+    $("#event-quick-fill").classList.toggle("hidden", !editing);
     // Toggle ALL inputs / selects / textareas inside the form.
     form.querySelectorAll("input, select, textarea").forEach((el) => {
       // Hidden inputs (id / attendees JSON string) must stay enabled
@@ -724,6 +884,7 @@
       el.classList.toggle("opacity-70", !editing);
       el.classList.toggle("cursor-not-allowed", !editing);
     });
+    form.querySelectorAll("[data-tz-trigger], [data-duration-min]").forEach(button => { button.disabled = !editing; });
     // Footer button visibility.
     const submitBtn = form.querySelector('button[type="submit"]');
     const cancelBtn = form.querySelector('.modal-close.rounded-lg');
@@ -921,6 +1082,7 @@
   const savedView = readSavedView();
   const cal = new tui.Calendar("#calendar", {
     defaultView: savedView || (isMobileViewport ? "day" : "week"),
+    timezone: { zones: [{ timezoneName: displayZone }] },
     useFormPopup: false,
     useDetailPopup: false,
     useCreationPopup: false,
@@ -959,6 +1121,14 @@
       },
     },
     template: {
+      time(model) {
+        const event = model.raw?.event;
+        if (!event) return escapeHtml(model.title);
+        const local = eventTime.range(event.startsAt, event.endsAt, displayZone, LOCALE);
+        const source = convertedTimes(event, displayZone, true);
+        const label = [event.summary, T("app.js.eventTime.local", { zone: zoneLabel(displayZone) }), local, ...source].join(" · ");
+        return `<span title="${escapeHtml(label)}" aria-label="${escapeHtml(label)}"><span>${escapeHtml(local)} ${escapeHtml(event.summary)}</span>${source.length ? `<small class="block opacity-80">${escapeHtml(source.join(" · "))}</small>` : ""}</span>`;
+      },
       monthDayName(model) { return `<span class="text-xs text-slate-500">${model.label}</span>`; },
       // Week header. Toast UI's default puts the weekday name and the date
       // number side by side, which needs more width than a column has on a
@@ -1095,7 +1265,7 @@
       // pass the YYYY-MM-DD string to Toast UI so it doesn't shift around
       // the user's local timezone boundary.
       const start = e.allDay ? e.startsAt.slice(0, 10) : e.startsAt;
-      const end = e.allDay ? e.endsAt.slice(0, 10) : e.endsAt;
+      const end = e.allDay ? eventTime.allDayDates(e.startsAt, e.endsAt).end : e.endsAt;
       // Past-event styling: events whose end is already in the past are
       // dimmed so the user's eye is drawn to upcoming + in-progress. We
       // don't move them out of the grid (still browsable in history).
@@ -1107,7 +1277,7 @@
       // stays the readable black/white for the full-strength colour;
       // at 55% over the grid the contrast only improves in light mode
       // and past blocks are de-emphasised by design in dark mode.
-      const endMs = +new Date(e.endsAt);
+      const endMs = eventTime.pastEnd(e, displayZone);
       const isPast = endMs < now;
       const baseColor = calColorById.get(e.calendarId);
       const style = isPast && baseColor
@@ -1132,11 +1302,13 @@
         // and clickEvent can detect "this is a recurring instance" and
         // prompt 仅此次/此后/系列 instead of silently editing the
         // whole series.
-        raw: { rrule: e.rrule || null, isOccurrence: !!e.isOccurrence },
+        raw: { rrule: e.rrule || null, isOccurrence: !!e.isOccurrence, event: e },
         ...style,
       };
     });
     cal.createEvents(events);
+    const zoneNote = $("#calendar-display-zone");
+    if (zoneNote) zoneNote.textContent = T("app.js.eventTime.local", { zone: zoneLabel(displayZone) });
     // Force a render so the red now-line redraws after we just cleared.
     try { cal.render(); } catch (_e) {}
     // Update the "下一个事件" banner from the same data.
@@ -1174,6 +1346,12 @@
     start.setHours(0, 0, 0, 0);
     const end = new Date(endRaw);
     end.setHours(23, 59, 59, 999);
+    // Fetch both floating UTC dates and local instants. UTC-west viewers can
+    // otherwise lose an all-day event at the beginning of the visible range.
+    const floatingStart = new Date(toLocalDateValue(start) + "T00:00:00.000Z");
+    const floatingEnd = new Date(toLocalDateValue(end) + "T23:59:59.999Z");
+    if (floatingStart < start) start.setTime(+floatingStart);
+    if (floatingEnd > end) end.setTime(+floatingEnd);
 
     // Stage 1: paint instantly from IndexedDB cache if available.
     // Skipped on cold first load (no cache yet) and when bwcStore isn't
@@ -1620,31 +1798,45 @@
     const startInput = $('#form-event [name="startsAt"]');
     const endInput = $('#form-event [name="endsAt"]');
     if (!startInput?.value) return;
-    const start = new Date(startInput.value);
+    let start;
+    try { start = formInstant($("#form-event"), "startsAt"); } catch (_) { return; }
     if (Number.isNaN(start.getTime())) return;
-    endInput.value = toLocalDateTimeValue(new Date(start.getTime() + Number(btn.dataset.durationMin) * 60000));
+    endInput.value = eventTime.inputValue(new Date(start.getTime() + Number(btn.dataset.durationMin) * 60000), inputZone($("#form-event"), "endsAt"));
     endInput.dispatchEvent(new Event("change", { bubbles: true }));
   });
 
   function syncAllDayUI() {
     const isAllDay = allDayCheckbox.checked;
+    const form = $("#form-event");
+    $("#end-zone-settings").classList.toggle("hidden", isAllDay || form.dataset.mode !== "edit");
+    $("#end-zone-picker").classList.toggle("hidden", !form.elements.separateEndTimeZone.checked);
+    durationChips?.classList.toggle("hidden", isAllDay || form.dataset.mode !== "edit");
     if (isAllDay) {
       timeRow.classList.add("hidden");
-      durationChips?.classList.add("hidden");
       dateRow.classList.remove("hidden");
-      // Mirror values
-      const s = $('#form-event [name="startsAt"]').value;
-      const e = $('#form-event [name="endsAt"]').value;
-      if (s) $('#form-event [name="startsAtDate"]').value = s.slice(0, 10);
-      if (e) $('#form-event [name="endsAtDate"]').value = e.slice(0, 10);
     } else {
       timeRow.classList.remove("hidden");
-      durationChips?.classList.remove("hidden");
       dateRow.classList.add("hidden");
     }
+    timeRow.querySelectorAll("input").forEach(input => { input.required = !isAllDay; });
+    dateRow.querySelectorAll("input").forEach(input => { input.required = isAllDay; });
   }
   allDayCheckbox.addEventListener("change", () => {
+    const form = $("#form-event"), start = form.elements.startsAt, end = form.elements.endsAt;
+    if (allDayCheckbox.checked) {
+      form.elements.startsAtDate.value = start.value.slice(0, 10);
+      form.elements.endsAtDate.value = end.value.slice(0, 10);
+      form.__bwcTimedBeforeAllDay = { start: start.value, end: end.value, first: start.value.slice(0, 10), last: end.value.slice(0, 10) };
+    } else {
+      const saved = form.__bwcTimedBeforeAllDay;
+      const unchanged = saved && saved.first === form.elements.startsAtDate.value && saved.last === form.elements.endsAtDate.value;
+      start.value = unchanged ? saved.start : form.elements.startsAtDate.value + "T09:00";
+      end.value = unchanged ? saved.end : form.elements.endsAtDate.value + "T10:00";
+    }
+    lastStartsAt = start.value;
+    lastStartsAtDate = form.elements.startsAtDate.value;
     syncAllDayUI();
+    syncTzHint();
     // 勾/去勾「全天」是用户自己动的手，而两组档位的语义不通用：-PT15M 挂到全天事件上
     // 按全天的算法是「当天 00:00 往前 15 分钟」= 前一天 23:45。所以切换时把不属于
     // 目标组的档位换成目标组的默认值 —— 换完下拉里看得见，不是静默改写。
@@ -1747,58 +1939,123 @@
     }
   }
 
-  // ---- Timezone-aware "wall clock in event's TZ" hint ----
-  // datetime-local inputs always render in the browser's local zone, no
-  // matter what value we set. That's confusing when the event is anchored
-  // to a different IANA zone — you type 14:00 thinking "14:00 New York",
-  // but the input parses it as 14:00 wherever-you-are. To avoid that
-  // bug-class we surface a yellow strip that shows what the typed time
-  // means in the event's stored zone, side-by-side with the browser zone.
-  const tzHintEl = $("#tz-hint");
-  const browserTz = (() => {
-    try { return Intl.DateTimeFormat().resolvedOptions().timeZone; } catch (_e) { return "UTC"; }
-  })();
-  function syncTzHint() {
-    if (!tzHintEl) return;
-    const form = $("#form-event");
-    const tzInput = form.querySelector('[name="timezone"]');
-    const startsInput = form.querySelector('[name="startsAt"]');
-    const eventTz = (tzInput && tzInput.value || "").trim();
-    const startsLocal = startsInput && startsInput.value;
-    if (!eventTz || !startsLocal || eventTz === browserTz) {
-      tzHintEl.classList.add("hidden");
-      tzHintEl.textContent = "";
-      return;
-    }
-    // The browser's interpretation of the datetime-local input — Date()
-    // treats it as local time, which IS the user's intent (they typed
-    // the wall clock in their browser zone). Re-render that same instant
-    // in the event's stored zone so they can see the offset.
-    const instant = new Date(startsLocal);
-    if (isNaN(instant.getTime())) { tzHintEl.classList.add("hidden"); return; }
-    let inEventTz;
-    try {
-      inEventTz = new Intl.DateTimeFormat(LOCALE, {
-        timeZone: eventTz, year: "numeric", month: "2-digit", day: "2-digit",
-        hour: "2-digit", minute: "2-digit", hour12: false,
-      }).format(instant);
-    } catch (_e) {
-      // Bad/unknown zone — hide rather than show garbage.
-      tzHintEl.classList.add("hidden"); return;
-    }
-    tzHintEl.textContent = T("app.js.tzHint", {
-      browserTz,
-      input: startsLocal.replace("T", " "),
-      eventTz,
-      converted: inEventTz,
-    });
-    tzHintEl.classList.remove("hidden");
+  function desiredInputZones(form) {
+    const viewer = form.dataset.displayTimeZone || displayZone;
+    if (form.dataset.mode !== "edit") return { start: viewer, end: viewer };
+    const start = eventTime.validZone(form.elements.timezone.value) || viewer;
+    const end = form.elements.separateEndTimeZone.checked ? eventTime.validZone(form.elements.endTimezone.value) || start : start;
+    return { start, end };
   }
-  // Trigger on every relevant input change. Debounced via the browser's
-  // own event loop — these handlers are cheap (string + Intl format).
-  $('#form-event [name="startsAt"]').addEventListener("input", syncTzHint);
-  $('#form-event [name="timezone"]').addEventListener("input", syncTzHint);
-  $('#form-event [name="timezone"]').addEventListener("change", syncTzHint);
+  function inputZone(form, field) {
+    const zones = form.__bwcInputZones || desiredInputZones(form);
+    return field === "startsAt" ? zones.start : zones.end;
+  }
+  function rebaseEditorZones(form) {
+    const next = desiredInputZones(form);
+    if (!form.__bwcInputZones || form.elements.allDay.checked) { form.__bwcInputZones = next; return; }
+    try {
+      const start = formInstant(form, "startsAt"), end = formInstant(form, "endsAt");
+      form.elements.startsAt.value = eventTime.inputValue(start, next.start);
+      form.elements.endsAt.value = eventTime.inputValue(end, next.end);
+      form.__bwcInputZones = next;
+      form.__bwcPreviousStart = start.toISOString();
+      lastStartsAt = form.elements.startsAt.value;
+    } catch (_) { /* incomplete draft keeps its explicitly labelled input zones */ }
+  }
+  function formInstant(form, field, value) {
+    const original = form.__bwcTimeSnapshot;
+    return eventTime.resolveInput(value ?? form.elements[field].value, inputZone(form, field),
+      form.elements[field + "Fold"]?.value || (original && !original.allDay && original[field === "startsAt" ? "start" : "end"]));
+  }
+  function syncFoldChoice(form, field) {
+    const select = form.elements[field + "Fold"];
+    if (!select) return;
+    const candidates = eventTime.localCandidates(form.elements[field].value, inputZone(form, field));
+    const previous = select.value;
+    const original = form.__bwcTimeSnapshot?.[field === "startsAt" ? "start" : "end"];
+    select.replaceChildren(...candidates.map(candidate => {
+      const option = document.createElement("option");
+      option.value = candidate.toISOString();
+      option.textContent = eventTime.offsetLabel(candidate, inputZone(form, field), LOCALE);
+      return option;
+    }));
+    select.value = candidates.find(candidate => +candidate === +new Date(previous || original))?.toISOString() || candidates[0]?.toISOString() || "";
+    select.closest("[data-fold-choice]").classList.toggle("hidden", candidates.length < 2 || allDayCheckbox.checked);
+    form.elements[field].setCustomValidity(candidates.length || allDayCheckbox.checked ? "" : T("app.js.eventTime.invalid"));
+  }
+  function syncTzHint() {
+    const form = $("#form-event"), hint = $("#tz-hint"), localNote = $("#event-local-zone");
+    if (!form || !hint) return;
+    const elapsed = $("#event-elapsed");
+    elapsed.classList.add("hidden");
+    elapsed.querySelector("[data-elapsed-value]").textContent = "";
+    const viewer = form.dataset.displayTimeZone || displayZone;
+    const inputZones = form.__bwcInputZones || desiredInputZones(form);
+    const editing = form.dataset.mode === "edit";
+    localNote.textContent = editing
+      ? (inputZones.start === inputZones.end ? T("app.js.eventTime.source", { zone: zoneLabel(inputZones.start) }) : T("app.js.eventTime.endpointInput"))
+      : T("app.js.eventTime.local", { zone: zoneLabel(viewer) });
+    for (const name of ["startsAt", "endsAt"]) {
+      const caption = form.querySelector(`[data-endpoint-zone="${name}"]`);
+      caption.textContent = zoneLabel(inputZone(form, name));
+      caption.classList.toggle("hidden", !editing || allDayCheckbox.checked);
+    }
+    localNote.classList.toggle("hidden", allDayCheckbox.checked);
+    syncFoldChoice(form, "startsAt"); syncFoldChoice(form, "endsAt");
+    for (const name of ["timezone", "endTimezone"]) window.bwcSyncTzPicker?.(form.elements[name].closest("[data-tz-picker]"));
+    hint.replaceChildren();
+    if (allDayCheckbox.checked) { hint.classList.add("hidden"); return; }
+    try {
+      const event = { calendarId: form.elements.calendarId.value, startsAt: formInstant(form, "startsAt"), endsAt: formInstant(form, "endsAt"),
+        extra: { timezone: form.elements.timezone.value, endTimezone: form.elements.separateEndTimeZone.checked ? form.elements.endTimezone.value : null } };
+      if (!editing) {
+        const value = eventTime.elapsed(event.startsAt, event.endsAt, LOCALE);
+        elapsed.querySelector("[data-elapsed-value]").textContent = value;
+        elapsed.classList.toggle("hidden", !value);
+      }
+      const lines = editing
+        ? (inputZones.start !== viewer || inputZones.end !== viewer ? [T("app.js.eventTime.local", { zone: zoneLabel(viewer) }) + " · " + eventTime.range(event.startsAt, event.endsAt, viewer, LOCALE, true)] : [])
+        : convertedTimes(event, viewer, true);
+      for (const line of lines) { const row = document.createElement("p"); row.textContent = line; hint.appendChild(row); }
+      hint.classList.toggle("hidden", !lines.length);
+    } catch (_) { hint.classList.add("hidden"); }
+  }
+  ["startsAt", "endsAt", "calendarId"].forEach(name => {
+    const input = $("#form-event").elements[name];
+    input.addEventListener("input", syncTzHint);
+    input.addEventListener("change", syncTzHint);
+  });
+  $("#form-event").elements.timezone.addEventListener("change", () => {
+    const form = $("#form-event");
+    form.__bwcZoneExplicit = true;
+    rebaseEditorZones(form); syncTzHint();
+  });
+  $("#form-event").elements.endTimezone.addEventListener("change", () => {
+    const form = $("#form-event");
+    form.__bwcEndZoneEdited = true;
+    form.elements.separateEndTimeZone.checked = eventTime.validZone(form.elements.endTimezone.value) !== eventTime.validZone(form.elements.timezone.value);
+    rebaseEditorZones(form); syncAllDayUI(); syncTzHint();
+  });
+  $("#form-event").elements.separateEndTimeZone.addEventListener("change", () => {
+    const form = $("#form-event");
+    form.__bwcEndZoneEdited = true;
+    if (!form.elements.endTimezone.value) form.elements.endTimezone.value = form.elements.timezone.value;
+    window.bwcSyncTzPicker?.(form.elements.endTimezone.closest("[data-tz-picker]"));
+    rebaseEditorZones(form); syncAllDayUI(); syncTzHint();
+  });
+  $("#form-event").elements.calendarId.addEventListener("change", () => {
+    const form = $("#form-event");
+    if (!form.elements.id.value && !form.__bwcZoneExplicit) {
+      form.elements.timezone.value = eventTime.validZone(calendarZone(form.elements.calendarId.value)) || displayZone;
+      window.bwcSyncTzPicker?.(form.elements.timezone.closest("[data-tz-picker]"));
+      rebaseEditorZones(form); syncTzHint();
+    }
+  });
+  ["startsAt", "endsAt"].forEach(name => {
+    $("#form-event").elements[name + "Fold"]?.addEventListener("change", () => {
+      $("#form-event").elements[name].dispatchEvent(new Event("change", { bubbles: true }));
+    });
+  });
 
   // ---- 地点联想：本地地址簿优先，在线兜底 ----
   // 纯逻辑在文件上方 bwcAddressBook；这里只管存储、播种、网络和下拉 UI。
@@ -2076,38 +2333,33 @@
   const endsAtDateInput = $('#form-event [name="endsAtDate"]');
   let lastStartsAt = null;       // datetime-local
   let lastStartsAtDate = null;   // date
-  function parseLocalDateTime(s) {
-    // datetime-local has no timezone; treat as local.
-    if (!s) return null;
-    return new Date(s);
-  }
-  function fmtLocalDateTime(d) {
-    if (!d || isNaN(+d)) return "";
-    return toLocalDateTimeValue(d);
-  }
   if (startsAtInput && endsAtInput) {
     startsAtInput.addEventListener("change", () => {
-      const newStart = parseLocalDateTime(startsAtInput.value);
-      const oldStart = parseLocalDateTime(lastStartsAt);
-      const oldEnd = parseLocalDateTime(endsAtInput.value);
+      const form = $("#form-event");
+      try {
+        const next = formInstant(form, "startsAt");
+        const old = eventTime.resolveInput(lastStartsAt, inputZone(form, "startsAt"), form.__bwcPreviousStart || form.__bwcTimeSnapshot?.start);
+        const oldEnd = formInstant(form, "endsAt");
+        const shifted = new Date(+oldEnd + (+next - +old));
+        endsAtInput.value = eventTime.inputValue(shifted, inputZone(form, "endsAt"));
+        form.__bwcPreviousStart = next.toISOString();
+        syncTzHint();
+        if ([...form.elements.endsAtFold.options].some(option => option.value === shifted.toISOString())) form.elements.endsAtFold.value = shifted.toISOString();
+      } catch (_) { /* incomplete/nonexistent local time: native validity prevents save */ }
       lastStartsAt = startsAtInput.value;
-      if (!newStart || !oldStart || !oldEnd) return;
-      const delta = +newStart - +oldStart;
-      if (delta === 0) return;
-      endsAtInput.value = fmtLocalDateTime(new Date(+oldEnd + delta));
     });
   }
   if (startsAtDateInput && endsAtDateInput) {
     startsAtDateInput.addEventListener("change", () => {
-      const newStart = startsAtDateInput.value ? new Date(startsAtDateInput.value + "T00:00") : null;
-      const oldStart = lastStartsAtDate ? new Date(lastStartsAtDate + "T00:00") : null;
-      const oldEnd = endsAtDateInput.value ? new Date(endsAtDateInput.value + "T00:00") : null;
+      const newStart = startsAtDateInput.value ? new Date(startsAtDateInput.value + "T00:00Z") : null;
+      const oldStart = lastStartsAtDate ? new Date(lastStartsAtDate + "T00:00Z") : null;
+      const oldEnd = endsAtDateInput.value ? new Date(endsAtDateInput.value + "T00:00Z") : null;
       lastStartsAtDate = startsAtDateInput.value;
       if (!newStart || !oldStart || !oldEnd) return;
       const deltaDays = Math.round((+newStart - +oldStart) / 86400000);
       if (!deltaDays) return;
       const shifted = new Date(+oldEnd + deltaDays * 86400000);
-      endsAtDateInput.value = toLocalDateValue(shifted);
+      endsAtDateInput.value = shifted.toISOString().slice(0, 10);
     });
   }
 
@@ -2180,17 +2432,10 @@
     wrap.classList.toggle("hidden", cat.value !== "meeting" && !hasValue);
   }
 
-  // 时间框是 5 分钟一档（step=300），但已有事件不一定落在档位上：全天事件结束在 23:59，手机建的
-  // 可能是 09:07。值对不上档位，表单校验就不过，保存点了没反应 —— 全天事件那两个时间框还是隐藏的，
-  // 浏览器连提示都显示不出来。不在档位上的放宽到 1 分钟；两个框一起放宽，改开始时间时结束时间
-  // 跟着平移，不会被挪到档位外面。
+  // Keep existing second/millisecond precision. Five-minute snapping belongs
+  // only to an explicit grid drag, never to a title-only form save.
   function syncTimeStep(form) {
-    const inputs = [form.querySelector('[name="startsAt"]'), form.querySelector('[name="endsAt"]')];
-    const offGrid = inputs.some((el) => {
-      const minutes = Number(String(el.value).slice(14, 16));
-      return minutes % 5 !== 0;
-    });
-    for (const el of inputs) el.step = offGrid ? "60" : "300";
+    for (const name of ["startsAt", "endsAt"]) form.elements[name].step = "any";
   }
 
   // 这一次的标识（RECURRENCE-ID）。全天事件存的是「那一天的 UTC 午夜」，而 Toast UI 给的是本地
@@ -2198,12 +2443,15 @@
   function occurrenceRefIso(start, isAllDay) {
     const d = start instanceof Date ? start : (start && typeof start.toDate === "function" ? start.toDate() : new Date(start));
     if (!d || isNaN(d.getTime())) return "";
-    return isAllDay ? toLocalDateValue(d) + "T00:00:00.000Z" : d.toISOString();
+    return isAllDay ? (typeof start === "string" ? start.slice(0, 10) : toLocalDateValue(d)) + "T00:00:00.000Z" : d.toISOString();
   }
 
   function openEventModal(payload) {
     const form = $("#form-event");
     form.reset();
+    form.__bwcZoneExplicit = false;
+    form.__bwcEndZoneEdited = false;
+    form.__bwcCacheBase = payload.cacheBase || null;
     form.querySelector('[name="id"]').value = payload.id || "";
     // Recurring-event scope tracking. The clickEvent handler passes
     // `recurrenceId` = the start of the specific occurrence the user
@@ -2225,11 +2473,22 @@
     if (payload.summary) form.querySelector('[name="summary"]').value = payload.summary;
     if (payload.location) form.querySelector('[name="location"]').value = payload.location;
     if (payload.description) form.querySelector('[name="description"]').value = payload.description;
-    form.querySelector('[name="startsAt"]').value = toLocalDateTimeValue(payload.startsAt || new Date());
-    form.querySelector('[name="endsAt"]').value = toLocalDateTimeValue(payload.endsAt || new Date(Date.now() + 3600_000));
+    form.dataset.displayTimeZone = displayZone;
+    form.__bwcInputZones = { start: displayZone, end: displayZone };
+    const originalStart = eventTime.date(payload.startsAt || new Date());
+    const originalEnd = eventTime.date(payload.endsAt || new Date(Date.now() + 3600_000));
+    const floating = payload.allDay ? eventTime.allDayDates(originalStart, originalEnd) : null;
+    form.querySelector('[name="startsAt"]').value = floating ? floating.start + "T09:00" : eventTime.inputValue(originalStart, displayZone);
+    form.querySelector('[name="endsAt"]').value = floating ? floating.end + "T10:00" : eventTime.inputValue(originalEnd, displayZone);
     syncTimeStep(form);
-    form.querySelector('[name="startsAtDate"]').value = toLocalDateValue(payload.startsAt || new Date());
-    form.querySelector('[name="endsAtDate"]').value = toLocalDateValue(payload.endsAt || new Date());
+    form.querySelector('[name="startsAtDate"]').value = floating ? floating.start : eventTime.inputValue(originalStart, displayZone).slice(0, 10);
+    form.querySelector('[name="endsAtDate"]').value = floating ? floating.end : eventTime.inputValue(originalEnd, displayZone).slice(0, 10);
+    form.__bwcTimedBeforeAllDay = null;
+    form.__bwcPreviousStart = originalStart.toISOString();
+    form.elements.startsAtFold.value = ""; form.elements.endsAtFold.value = "";
+    form.__bwcTimeSnapshot = payload.id ? { start: originalStart.toISOString(), end: originalEnd.toISOString(), allDay: !!payload.allDay,
+      dateStart: floating?.start, dateEnd: floating?.end, calendarId: payload.calendarId,
+      storedTimezone: eventTime.validZone(payload.timezone), endTimezone: payload.endTimezone } : null;
     // Remember the just-set start values so the change-listener can
     // compute deltas correctly (we want to track delta from the
     // user's most-recent typed value, not from form.reset()'s blank).
@@ -2274,23 +2533,20 @@
     // 下拉里没有的 trigger 会被临时插成一个选项（见 renderReminderOptions），
     // 不再静默显示成「无」——那等于用户存一次就把别的客户端设的提醒删了。
     setReminderFromAlarms(payload.alarms, !!payload.allDay, !!payload.id);
-    // Timezone field is now a hidden <input> driven by the custom
-    // searchable combobox (#modal-tz). Set the underlying value, then
-    // ask the picker to refresh its visible label. For a NEW event with
-    // no stored timezone, prefill the BROWSER-DETECTED zone (the OS's IANA
-    // zone via Intl — already accurate; no geolocation needed) so the
-    // picker reflects where the user actually is instead of a hardcoded
-    // Asia/Shanghai. The user still sees + can change it in the picker.
+    // Source zone follows existing metadata, then its calendar's default.
+    // The browser zone is a display choice and must not overwrite that source.
     const tzInput = form.querySelector('[name="timezone"]');
     if (tzInput) {
-      let detectedTz = "Asia/Shanghai";
-      try { detectedTz = Intl.DateTimeFormat().resolvedOptions().timeZone || detectedTz; } catch (_e) { /* keep fallback */ }
-      tzInput.value = payload.timezone || detectedTz;
+      tzInput.value = eventTime.validZone(payload.timezone) || eventTime.validZone(calendarZone(form.elements.calendarId.value)) || displayZone;
+      if (form.__bwcTimeSnapshot) form.__bwcTimeSnapshot.timezone = tzInput.value;
       const tzPicker = tzInput.closest("[data-tz-picker]");
       if (tzPicker && typeof window.bwcSyncTzPicker === "function") {
         window.bwcSyncTzPicker(tzPicker);
       }
     }
+    form.elements.endTimezone.value = eventTime.validZone(payload.endTimezone) || form.elements.timezone.value;
+    form.elements.separateEndTimeZone.checked = !!eventTime.validZone(payload.endTimezone) && eventTime.validZone(payload.endTimezone) !== eventTime.validZone(form.elements.timezone.value);
+    window.bwcSyncTzPicker?.(form.elements.endTimezone.closest("[data-tz-picker]"));
     syncAllDayUI();
     // Show tz hint immediately if the event is anchored to a non-browser zone.
     if (typeof syncTzHint === "function") syncTzHint();
@@ -2739,6 +2995,9 @@
     if (!fresh) return;
     const extra = fresh.extra || {};
     openEventModal({
+      cacheBase: { ...fresh,
+        startsAt: eventTime.date(fresh.rrule && occStart ? occStart : fresh.startsAt).toISOString(),
+        endsAt: eventTime.date(fresh.rrule && occEnd ? occEnd : fresh.endsAt).toISOString() },
       id: fresh.id,
       calendarId: fresh.calendarId,
       summary: fresh.summary,
@@ -2749,8 +3008,8 @@
       // Show the clicked occurrence's start/end (not the master's) so
       // editing "仅此次" starts from the right slot. fresh.startsAt is
       // the master; occStart is the occurrence.
-      startsAt: occStart || fresh.startsAt,
-      endsAt: occEnd || fresh.endsAt,
+      startsAt: fresh.rrule && occStart ? occStart : fresh.startsAt,
+      endsAt: fresh.rrule && occEnd ? occEnd : fresh.endsAt,
       masterStartsAt: fresh.startsAt,
       allDay: fresh.allDay,
       rrule: fresh.rrule || "",
@@ -2759,13 +3018,14 @@
       recurrenceId: occStart || null,
       category: extra.category,
       timezone: extra.timezone,
+      endTimezone: extra.endTimezone,
       attendees: Array.isArray(extra.attendees) ? extra.attendees : [],
       alarms: Array.isArray(extra.alarms) ? extra.alarms : [],
     });
   }
 
   cal.on("clickEvent", (info) => {
-    void openExistingEvent(info.event.calendarId, info.event.id, info.event.start, info.event.end);
+    void openExistingEvent(info.event.calendarId, info.event.id, info.event.raw?.event?.startsAt || info.event.start, info.event.raw?.event?.endsAt || info.event.end);
   });
 
   // Deep link: /app?event=<id>&cal=<calendarId> opens that event once, on
@@ -2827,18 +3087,13 @@
     const data = Object.fromEntries(new FormData(e.target).entries());
     const id = data.id;
     const isAllDay = !!data.allDay;
-    let startsIso, endsIso;
-    if (isAllDay) {
-      // Date-only inputs — store the calendar date as UTC midnight directly so
-      // it never crosses a day boundary under a TZ shift.
-      startsIso = data.startsAtDate + "T00:00:00.000Z";
-      endsIso = data.endsAtDate + "T23:59:59.999Z";
-    } else {
-      // datetime-local gives "YYYY-MM-DDTHH:MM" interpreted as the user's
-      // browser-local time; toISOString converts to UTC.
-      startsIso = new Date(data.startsAt).toISOString();
-      endsIso = new Date(data.endsAt).toISOString();
+    let times;
+    try { times = eventTime.timeFields(data, e.target.__bwcTimeSnapshot, e.target.__bwcInputZones || desiredInputZones(e.target)); }
+    catch (error) {
+      window.bwc?.toast(T(error.message === "invalid_local_time" ? "app.js.eventTime.invalid" : "app.js.eventTime.order"), "error");
+      return;
     }
+    const startsIso = times.startsAt, endsIso = times.endsAt;
     const attendees = parseEmails(data.attendees);
     const body = {
       calendarId: data.calendarId,
@@ -2885,6 +3140,11 @@
         }
       }
     } catch (_e) { /* soft check — never block save on a network glitch */ }
+    if (!isAllDay) {
+      const endZone = eventTime.endZoneField(data, e.target.__bwcTimeSnapshot, e.target.__bwcEndZoneEdited);
+      if (endZone !== undefined) body.extra.endTimezone = endZone;
+    }
+    if (id) eventTime.preserveUnchanged(body, e.target.__bwcTimeSnapshot);
     // Recurring-event scope dialog: if we're editing an existing event
     // that has an RRULE, ask whether the change applies to just this
     // occurrence, this+future, or the whole series. New events skip
@@ -2922,7 +3182,7 @@
         const seriesRef = recurringScope === "series" && form.dataset.recurrenceId
           ? { scope: "series", recurrenceId: form.dataset.recurrenceId, seriesBase: form.dataset.seriesBase || undefined }
           : {};
-        await window.bwcStore.put(id ? { ...body, ...seriesRef, id } : body, body.calendarId);
+        await window.bwcStore.put(id ? { ...body, ...seriesRef, id } : body, body.calendarId, form.__bwcCacheBase);
         closeModal("#modal-event");
         await loadEvents();
         learnLocationOnSave(data);
@@ -3704,6 +3964,45 @@
     window.__bwcResize = setTimeout(() => { try { cal.render(); } catch (e) {} }, 150);
   });
 
+  function refreshDisplayZone() {
+    if (document.hidden) return;
+    const next = eventTime.browserZone();
+    if (next === displayZone) return;
+    const previous = displayZone;
+    const anchor = cal.getDate().toDate();
+    const anchorDay = eventTime.inputValue(anchor, previous).slice(0, 10);
+    const wasToday = anchorDay === eventTime.inputValue(new Date(), previous).slice(0, 10);
+    displayZone = next;
+    cal.setOptions({ timezone: { zones: [{ timezoneName: next }] } });
+    let nextAnchor = new Date();
+    if (!wasToday) {
+      try { nextAnchor = eventTime.resolveInput(anchorDay + "T12:00", next); }
+      catch (_) { nextAnchor = anchor; } // a historically skipped civil day
+    }
+    cal.setDate(nextAnchor);
+    lastRenderedFingerprint = "";
+    refresh();
+    // A valid timed draft can follow the device without changing either instant.
+    // An incomplete draft keeps its explicit previous-zone label until corrected.
+    const form = $("#form-event");
+    if (!$("#modal-event").classList.contains("hidden") && !form.elements.allDay.checked) {
+      try {
+        const start = formInstant(form, "startsAt"), end = formInstant(form, "endsAt");
+        form.dataset.displayTimeZone = next;
+        const zones = desiredInputZones(form);
+        form.__bwcInputZones = zones;
+        form.elements.startsAt.value = eventTime.inputValue(start, zones.start);
+        form.elements.endsAt.value = eventTime.inputValue(end, zones.end);
+        form.__bwcPreviousStart = start.toISOString();
+        lastStartsAt = form.elements.startsAt.value;
+        syncTzHint();
+      } catch (_) { /* retain the existing labelled draft */ }
+    }
+  }
+  window.addEventListener("focus", refreshDisplayZone);
+  document.addEventListener("visibilitychange", refreshDisplayZone);
+  setInterval(refreshDisplayZone, 30000);
+
   // ---------- Timezone picker (custom searchable combobox) ----------
   // Replaces the old <input list=tz-options> which let users free-type
   // garbage like "上海" — that "looked right" but isn't a valid IANA id
@@ -3724,30 +4023,39 @@
     // Track the picker element that opened the modal, so we know where
     // to write the result back. Only one modal can be open at a time.
     let activePicker = null;
+    let activeOptions = zones;
+    function pickerInstant(picker) {
+      const form = picker?.closest("#form-event");
+      if (form && !form.elements.allDay.checked) {
+        const field = picker.querySelector('input[type="hidden"]').name === "endTimezone" ? "endsAt" : "startsAt";
+        try { return formInstant(form, field); } catch (_) { /* incomplete draft */ }
+      }
+      return new Date();
+    }
 
-    function labelFor(zoneId) {
+    function labelFor(zoneId, picker) {
       // Find the first matching curated entry; fall back to the IANA id.
       const z = zones.find((t) => t.id === zoneId);
       if (!z) return zoneId || "Asia/Shanghai";
       // Per-locale bracket style: CJK locales use fullwidth parens.
-      return T("app.js.tz.labelFormat", { label: z.label, offset: z.offset });
+      return T("app.js.tz.labelFormat", { label: z.label, offset: eventTime.offsetLabel(pickerInstant(picker), z.id, LOCALE) });
     }
 
     function syncPickerLabel(picker) {
-      const hidden = picker.querySelector('input[name="timezone"]');
+      const hidden = picker.querySelector('input[type="hidden"]');
       const label = picker.querySelector("[data-tz-label]");
       if (!hidden || !label) return;
-      label.textContent = labelFor(hidden.value);
+      label.textContent = labelFor(hidden.value, picker);
     }
 
     function renderList(filter) {
       const q = filter.trim().toLowerCase();
       const matches = q
-        ? zones.filter((z) => {
+        ? activeOptions.filter((z) => {
             const hay = `${z.label} ${z.id} ${z.offset}`.toLowerCase();
             return hay.includes(q);
           })
-        : zones;
+        : activeOptions;
       // Cap at 200 results so a blank search doesn't dump 420 DOM nodes.
       const capped = matches.slice(0, 200);
       list.innerHTML = capped.length === 0
@@ -3762,6 +4070,10 @@
 
     function openTzModal(picker) {
       activePicker = picker;
+      const at = pickerInstant(picker);
+      // An event picker uses that endpoint's instant, not today's DST offset.
+      // Compute the search rows once per open, not on every keypress.
+      activeOptions = zones.map(zone => ({ ...zone, offset: eventTime.offsetLabel(at, zone.id, LOCALE) }));
       openModal(modal);
       search.value = "";
       renderList("");
@@ -3772,7 +4084,7 @@
         setTimeout(() => search.focus(), 30);
       }
       // Scroll the currently-selected item into view if it's in the list.
-      const hidden = picker.querySelector('input[name="timezone"]');
+      const hidden = picker.querySelector('input[type="hidden"]');
       if (hidden && hidden.value) {
         const found = list.querySelector(`[data-tz-pick="${CSS.escape(hidden.value)}"]`);
         if (found) found.scrollIntoView({ block: "center" });
@@ -3786,7 +4098,7 @@
 
     function commitPick(zoneId) {
       if (!activePicker) return;
-      const hidden = activePicker.querySelector('input[name="timezone"]');
+      const hidden = activePicker.querySelector('input[type="hidden"]');
       if (hidden) hidden.value = zoneId;
       syncPickerLabel(activePicker);
       // Notify listeners (e.g. tz-hint in event modal) by firing 'change'

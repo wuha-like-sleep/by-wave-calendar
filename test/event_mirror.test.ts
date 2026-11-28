@@ -12,6 +12,7 @@ type Win = { fromMs: number; toMs: number; fetchStartedAt: number; now: number; 
 const M = (globalThis as unknown as {
   bwcMirrorCore: {
     rowKeyOf(e: Row): string;
+    mergeLocalEvent(base: Row | undefined, patch: Record<string, unknown>, id: string): Row;
     toLocalRow(e: Row, now: number): Row;
     planWindowMerge(rows: Row[], events: Row[], win: Win): { puts: Row[]; deletes: string[] };
     visibleRows(rows: Row[], fromMs: number, toMs: number): Row[];
@@ -209,5 +210,26 @@ describe("同步计划：基线 span 决定走增量还是全量", () => {
   it("强制全量时窗口在基线内也走全量，范围是并集", () => {
     const mid1 = T("2026-11-10T00:00:00Z"), mid2 = T("2026-11-20T00:00:00Z");
     expect(M.syncPlan(state, mid1, mid2, true)).toEqual({ mode: "full", fromMs: FROM, toMs: TO });
+  });
+});
+
+describe("offline timezone edits", () => {
+  it("merges a partial PATCH while preserving the instant and unrelated endpoint metadata", () => {
+    const base = one("e1", "10", { extra: { timezone: "Australia/Melbourne", endTimezone: "Asia/Shanghai", url: "https://example.org" } });
+    const patch = { summary: "Updated title", extra: { url: null } };
+    const edited = M.mergeLocalEvent(base, patch, "e1");
+    expect(edited).toMatchObject({ summary: "Updated title", startsAt: base.startsAt, endsAt: base.endsAt, _dirty: true });
+    expect(edited.extra).toEqual({ timezone: "Australia/Melbourne", endTimezone: "Asia/Shanghai" });
+    expect(M.mergeLocalEvent(edited, { extra: null }, "e1").extra).toBeNull();
+    expect(M.mergeLocalEvent(edited, { location: "Office" }, "e1").extra).toEqual(edited.extra);
+    expect(patch).toEqual({ summary: "Updated title", extra: { url: null } });
+  });
+  it("uses the selected occurrence for an optimistic series edit and retains its absolute times", () => {
+    const base = M.toLocalRow(occ("series", "09", { extra: { timezone: "Australia/Melbourne" } }), NOW);
+    const updated = M.mergeLocalEvent(base, { summary: "Updated", scope: "series", recurrenceId: base.startsAt }, "series");
+    expect(updated.id).toBe("series");
+    expect(updated).not.toHaveProperty("_masterId");
+    expect(updated).not.toHaveProperty("recurrenceId");
+    expect(read([base, updated])).toMatchObject([{ id: "series", summary: "Updated", startsAt: base.startsAt, endsAt: base.endsAt }]);
   });
 });

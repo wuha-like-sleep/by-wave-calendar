@@ -12,6 +12,7 @@ import path from "node:path";
 
 import { TIMED_TRIGGERS, ALLDAY_TRIGGERS, type TriggerOption } from "../src/lib/reminder_triggers.js";
 import { clientStrings } from "../src/lib/i18n.js";
+import "../src/public/calendar-app.js";
 import { en } from "../src/lib/i18n/locales/en.js";
 import { zhCN } from "../src/lib/i18n/locales/zh-CN.js";
 import { zhTW } from "../src/lib/i18n/locales/zh-TW.js";
@@ -112,12 +113,13 @@ describe("提醒文案在八个 locale 里都写全了", () => {
   });
 });
 
-describe("extra 的每个键都发显式 null", () => {
+describe("extra 可编辑字段与省略保留规则", () => {
   // 服务端把 extra 改成浅合并之后，省略的含义从「删除」变成了「保留」。
   // 这里漏一个键，用户就再也清不掉那个字段，而且页面照常保存成功、不报错 ——
   // 正是这一期在修的那类「不报错但做错」。
   it("submit 里的 extra 字面量没有 undefined，六个键一个不少", () => {
-    const m = /extra: \{([\s\S]*?)\n      \},/.exec(APP_JS);
+    const submit = APP_JS.slice(APP_JS.indexOf('$("#form-event").addEventListener("submit"'));
+    const m = /extra: \{([\s\S]*?)\n      \},/.exec(submit);
     expect(m, "calendar-app.js 里找不到 submit 的 extra 字面量").toBeTruthy();
     const block = m![1];
     for (const key of ["category", "timezone", "attendees", "url", "meetingPassword", "alarms"]) {
@@ -125,4 +127,13 @@ describe("extra 的每个键都发显式 null", () => {
     }
     expect(block).not.toContain("undefined");
   });
+  it("结束时区未改时省略，显式恢复跟随时清除，新建独立终点才写入", () => {
+    const times = (globalThis as unknown as { bwcEventTime: { endZoneField(data: Record<string, string>, snapshot: Record<string, string> | null, touched: boolean): string | null | undefined } }).bwcEventTime;
+    const original = { timezone: "Australia/Melbourne", endTimezone: "Asia/Shanghai" };
+    expect(times.endZoneField({ timezone: original.timezone }, null, false)).toBeUndefined();
+    expect(times.endZoneField({ ...original, separateEndTimeZone: "on" }, original, false)).toBeUndefined();
+    expect(times.endZoneField({ timezone: original.timezone }, original, true)).toBeNull();
+    expect(times.endZoneField({ ...original, separateEndTimeZone: "on" }, null, true)).toBe("Asia/Shanghai");
+  });
+
 });

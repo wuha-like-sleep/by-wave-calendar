@@ -192,6 +192,17 @@ describe("public booking experience", () => {
     }
   });
 
+  it("keeps the original host timezone on the cancellation page after calendar settings change", async () => {
+    await db.update(schema.calendars).set({ timezone: "Australia/Melbourne" }).where(eq(schema.calendars.id, link.calendarId));
+    const created = await reserve();
+    await db.update(schema.calendars).set({ timezone: "Asia/Shanghai" }).where(eq(schema.calendars.id, link.calendarId));
+    const response = await app.inject({ url: `/book-cancel/${created.booking.cancelToken}` });
+    expect(response.statusCode).toBe(200);
+    const page = new JSDOM(response.body);
+    expect(page.window.document.querySelector("#booking-zone-note")!.textContent).toContain("Australia/Melbourne");
+    page.window.close();
+  });
+
   it("shows the appointment date and time before cancelling it", async () => {
     const created = await reserve();
     const response = await app.inject({ url: `/book-cancel/${created.booking.cancelToken}` });

@@ -44,6 +44,39 @@ async function csrf() {
   return (page.window.document.querySelector('[name="_csrf"]') as HTMLInputElement).value;
 }
 describe("ByWave adapter", () => {
+  it.each([false, true])("normalizes old all-day inclusive ends for native snapshots (recurring=%s) without rewriting stored dates", async recurring => {
+    const a = adapter();
+    const fixtures = [
+      ["2026-06-01T23:59:59.999Z", "2026-06-02T00:00:00.000Z"],
+      ["2026-06-02T00:00:00.000Z", "2026-06-02T00:00:00.000Z"],
+      ["2026-06-03T23:59:59.000Z", "2026-06-04T00:00:00.000Z"],
+      ["2026-06-04T00:00:00.000Z", "2026-06-04T00:00:00.000Z"],
+    ];
+    for (const [storedEnd, expectedEnd] of fixtures) {
+      const row = await makeEvent(calendarId, "all-day-" + storedEnd);
+      await db.update(schema.events).set({ startsAt: new Date("2026-06-01T00:00:00Z"), endsAt: new Date(storedEnd!), allDay: true, rrule: recurring ? "FREQ=WEEKLY;COUNT=2" : null }).where(eq(schema.events.id, row.id));
+      const items = [...(await a.snapshot([])).values()].filter(item => item.id.startsWith(row.id));
+      expect(items).toHaveLength(recurring ? 2 : 1);
+      expect(items[0]!.content).toMatchObject({ startsAt: "2026-06-01T00:00:00.000Z", endsAt: expectedEnd, allDay: true });
+      if (recurring) expect(new Date(items[1]!.content.endsAt).getTime() - new Date(items[0]!.content.endsAt).getTime()).toBe(7 * 86400000);
+      expect((await db.select().from(schema.events).where(eq(schema.events.id, row.id)))[0]!.endsAt.toISOString()).toBe(storedEnd);
+    }
+  });
+  it("imports native source zones and preserves exact existing city and unrelated metadata on round trips", async () => {
+    const a = adapter();
+    const content = { summary: "Source meeting", description: "", location: "", startsAt: "2026-11-28T13:30:00.000Z", endsAt: "2026-11-28T14:30:00.000Z", allDay: false,
+      timezone: "Australia/Melbourne", endTimezone: "Asia/Shanghai" };
+    const created = await a.save(content, undefined, "outlook:zones");
+    await db.update(schema.events).set({ extra: { timezone: "Australia/Melbourne", endTimezone: "Asia/Shanghai", alarms: [{ trigger: "-PT10M", action: "DISPLAY" }], url: "https://example.test/keep" } }).where(eq(schema.events.id, created.id));
+    const current = (await a.snapshot([])).get(created.id)!;
+    const saved = await a.save({ ...current.content, summary: "Native title edit", timezone: "Australia/Sydney" }, current);
+    const stored = (await db.select().from(schema.events).where(eq(schema.events.id, saved.id)))[0]!;
+    expect(stored.startsAt.toISOString()).toBe(content.startsAt); expect(stored.endsAt.toISOString()).toBe(content.endsAt);
+    expect(stored.extra).toMatchObject({ timezone: "Australia/Melbourne", endTimezone: "Asia/Shanghai", alarms: expect.any(Array), url: "https://example.test/keep" });
+    const cleared = await a.save({ ...saved.content, endTimezone: null }, saved);
+    expect(cleared.content.endTimezone).toBeNull();
+    expect((await db.select().from(schema.events).where(eq(schema.events.id, saved.id)))[0]!.extra).not.toHaveProperty("endTimezone");
+  });
   it("creates idempotently and preserves metadata on updates", async () => {
     const a = adapter(); const row = await makeEvent(calendarId, "existing");
     await db.update(schema.events).set({ extra: { alarms: [{ action: "DISPLAY", trigger: -600 }], timezone: "Australia/Melbourne" } }).where(eq(schema.events.id, row.id));

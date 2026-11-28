@@ -241,7 +241,7 @@ describe("订阅链接（/ics/:token）导出", () => {
     await dav.close();
   });
 
-  it("全天事件写成日期（纽约日历里也是那一天），不重复的定时事件写成确定的 UTC 时刻（以前是不带时区的浮动时间）", async () => {
+  it("全天事件写成日期（纽约日历里也是那一天），单次定时事件按日历时区输出并保留真实时刻", async () => {
     const cal = await calendarIn("America/New_York", "纽约");
     await createEvent({
       calendarId: cal.id, summary: "全天", allDay: true, rrule: "FREQ=WEEKLY",
@@ -256,7 +256,8 @@ describe("订阅链接（/ics/:token）导出", () => {
     const lines = veventLines(res.body);
     expect(lines).toContain("DTSTART;VALUE=DATE:20261005");
     expect(lines).toContain("DTEND;VALUE=DATE:20261006");
-    expect(lines).toContain("DTSTART:20261006T000000Z");
+    expect(lines).toContain("DTSTART;TZID=America/New_York:20261005T200000");
+    expect(lines).toContain("DTEND;TZID=America/New_York:20261005T210000");
     await dav.close();
   });
 });

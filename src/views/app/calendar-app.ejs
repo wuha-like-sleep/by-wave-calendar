@@ -206,6 +206,7 @@
           <a href="/app/settings#caldav-connect" class="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50"><%= t("app.empty.caldav") %></a>
         </div>
       </div>
+      <p id="calendar-display-zone" class="mx-3 sm:mx-5 mt-2 text-xs text-slate-500"></p>
       <div id="calendar" class="flex-1" style="min-height: calc(100vh - 14rem); min-height: calc(100dvh - 14rem); position: relative;">
         <%# 静态骨架：与 calendar-app.js 里 showLoadingSkeleton() 动态生成的
             覆盖层同 id、同造型。库改为动态加载后，JS 启动前网格区不再空白；
@@ -253,7 +254,7 @@
 
       <%# Natural-language quick-fill: parses phrases like "明天下午3点牙医"
           (or "15:30 dentist") into an event. %>
-      <div class="rounded-lg bg-gradient-to-r from-brand-50 to-violet-50 border border-brand-100 p-2">
+      <div id="event-quick-fill" class="rounded-lg bg-gradient-to-r from-brand-50 to-violet-50 border border-brand-100 p-2">
         <label class="flex items-center gap-2">
           <span class="text-base">🪄</span>
           <input type="text" id="nl-input" placeholder="<%= t("app.event.nlPlaceholder") %>"
@@ -345,16 +346,25 @@
       </div>
 
       <!-- Time -->
+      <p id="event-local-zone" class="text-xs font-medium text-slate-600"></p>
       <div class="grid grid-cols-1 sm:grid-cols-2 gap-3" id="time-row">
         <div>
           <label class="block text-xs font-medium text-slate-600 mb-1"><%= t("app.event.starts") %></label>
-          <input type="datetime-local" name="startsAt" required step="300"
+          <input type="datetime-local" name="startsAt" required step="any"
                  class="w-full rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
+          <p data-endpoint-zone="startsAt" class="hidden mt-1 text-xs text-slate-500"></p>
+          <label data-fold-choice class="hidden block mt-1 text-xs text-slate-600"><%= t("app.js.eventTime.fold") %>
+            <select name="startsAtFold" class="ml-1 rounded border border-slate-300 bg-white px-2 py-1"></select>
+          </label>
         </div>
         <div>
           <label class="block text-xs font-medium text-slate-600 mb-1"><%= t("app.event.ends") %></label>
-          <input type="datetime-local" name="endsAt" required step="300"
+          <input type="datetime-local" name="endsAt" required step="any"
                  class="w-full rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
+          <p data-endpoint-zone="endsAt" class="hidden mt-1 text-xs text-slate-500"></p>
+          <label data-fold-choice class="hidden block mt-1 text-xs text-slate-600"><%= t("app.js.eventTime.fold") %>
+            <select name="endsAtFold" class="ml-1 rounded border border-slate-300 bg-white px-2 py-1"></select>
+          </label>
         </div>
       </div>
       <%# Duration quick chips: one click sets endsAt = startsAt + chip.
@@ -369,13 +379,16 @@
         <button type="button" data-duration-min="120"
                 class="rounded-full border border-slate-300 bg-white px-2.5 py-1 text-xs text-slate-600 hover:border-brand-400 hover:text-brand-600"><%= t("app.event.duration2h") %></button>
       </div>
+      <p id="event-elapsed" class="hidden text-sm text-slate-600">
+        <span><%= t("app.event.duration") %></span> · <span data-elapsed-value class="font-medium text-slate-800"></span>
+      </p>
       <%# Timezone hint: shows the event's wall-clock in its stored zone
           when the user's browser is in a different zone (e.g. you're in
           Shanghai editing an event tagged as America/New_York → see the
           original wall time in New York) so the inputs aren't misread as
           local time. Populated by calendar-app.js on every modal open /
           time / timezone change. %>
-      <p id="tz-hint" class="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-2 py-1.5 hidden"></p>
+      <div id="tz-hint" class="text-xs text-slate-600 bg-slate-50 border border-slate-200 rounded-md px-3 py-2 space-y-1 hidden" aria-live="polite"></div>
       <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 hidden" id="date-row">
         <div>
           <label class="block text-xs font-medium text-slate-600 mb-1"><%= t("app.event.startDate") %></label>
@@ -396,7 +409,7 @@
           This widget always commits a valid IANA id. data-tz-picker
           wires up the JS in calendar-app.js, which also fills in the
           visible label from the localized timezone list. %>
-      <div data-tz-picker>
+      <div data-tz-picker id="event-origin-zone">
         <label class="block text-xs font-medium text-slate-600 mb-1"><%= t("app.event.timezone") %></label>
         <input type="hidden" name="timezone" value="Asia/Shanghai" />
         <button type="button" data-tz-trigger
@@ -405,6 +418,24 @@
           <svg class="h-4 w-4 flex-none text-slate-400" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 0 1 1.06.02L10 11.06l3.71-3.83a.75.75 0 1 1 1.08 1.04l-4.25 4.39a.75.75 0 0 1-1.08 0L5.21 8.27a.75.75 0 0 1 .02-1.06z" clip-rule="evenodd"/></svg>
         </button>
         <p class="mt-1 text-xs text-slate-400"><%= t("app.event.tzSearchHint") %></p>
+      </div>
+
+      <div id="end-zone-settings" class="hidden">
+        <label class="flex items-center gap-2 text-sm text-slate-700">
+          <input type="checkbox" name="separateEndTimeZone" class="rounded border-slate-300" />
+          <%= t("app.js.eventTime.separateEnd") %>
+        </label>
+      <div data-tz-picker id="end-zone-picker" class="hidden mt-2">
+        <label class="block text-xs font-medium text-slate-600 mb-1"><%= t("app.js.eventTime.endZone") %></label>
+        <input type="hidden" name="endTimezone" value="" />
+        <button type="button" data-tz-trigger
+                class="w-full flex items-center justify-between rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100 hover:bg-slate-50">
+          <span data-tz-label class="truncate text-slate-900">…</span>
+          <svg class="h-4 w-4 flex-none text-slate-400" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 0 1 1.06.02L10 11.06l3.71-3.83a.75.75 0 1 1 1.08 1.04l-4.25 4.39a.75.75 0 0 1-1.08 0L5.21 8.27a.75.75 0 0 1 .02-1.06z" clip-rule="evenodd"/></svg>
+        </button>
+        <p class="mt-1 text-xs text-slate-400"><%= t("app.event.tzSearchHint") %></p>
+      </div>
+
       </div>
 
       <!-- Location：本地地址簿联想（在线兜底分组在下拉底部），逻辑在

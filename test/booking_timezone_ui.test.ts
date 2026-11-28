@@ -62,6 +62,26 @@ describe("booking timezone presentation", () => {
     expect(data.get("guestTimeZone")).toBe("Asia/Shanghai");
     expect(data.get("startsAt")).toBe("2026-11-17T01:00:00Z");
   });
+  it.each(["public", "cancel"] as const)("shows both calendar dates for a midnight Melbourne appointment on %s", template => {
+    const p = page(template, [slot("2026-11-28T13:30:00Z")], "Australia/Melbourne", "Asia/Shanghai");
+    const publicPage = template === "public";
+    if (publicPage) p.document.querySelector<HTMLButtonElement>(".slot-btn")!.click();
+    const primary = p.document.querySelector(publicPage ? "#selected-slot-primary" : "#booking-cancel-time")!;
+    const reference = p.document.querySelector(publicPage ? "#selected-slot-reference" : "#booking-cancel-reference")!;
+    expect(primary.textContent).toMatch(/28.*21:30/);
+    expect(reference.textContent).toContain("Australia/Melbourne");
+    expect(reference.textContent).toMatch(/29.*00:30/);
+
+    const select = p.document.querySelector<HTMLSelectElement>("#booking-timezone")!;
+    select.value = "host";
+    select.dispatchEvent(new p.window.Event("change"));
+    expect(primary.textContent).toMatch(/29.*00:30/);
+    expect(reference.textContent).toContain("Asia/Shanghai");
+    expect(reference.textContent).toMatch(/28.*21:30/);
+    p.setDevice("Australia/Melbourne");
+    expect(reference.classList.contains("hidden")).toBe(true);
+    if (publicPage) expect(p.document.querySelector<HTMLInputElement>("#picked-slot")!.value).toBe("2026-11-28T13:30:00Z");
+  });
   it("distinguishes the two instants in a daylight-saving repeated hour", () => {
     const p = page("public", [slot("2026-11-01T05:30:00Z"), slot("2026-11-01T06:30:00Z")], "America/New_York", "America/New_York");
     const buttons = [...p.document.querySelectorAll<HTMLButtonElement>(".slot-btn")];

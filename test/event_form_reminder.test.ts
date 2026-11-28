@@ -356,9 +356,9 @@ describe("calendar-app.js 的表单确实走这套规则", () => {
   it("已有事件的时间不在 5 分钟档位上也存得了（全天事件结束在 23:59，校验不过就点了没反应）", () => {
     const fn = /function syncTimeStep\([\s\S]*?\n  \}/.exec(APP_JS);
     expect(fn, "找不到 syncTimeStep").toBeTruthy();
-    expect(fn![0]).toMatch(/el\.step = offGrid \? "60" : "300"/);
+    expect(fn![0]).toContain('form.elements[name].step = "any"');
     // 要排在两个时间框赋值之后：表单每次打开都重新判断
-    const open = APP_JS.indexOf('form.querySelector(\'[name="endsAt"]\').value = toLocalDateTimeValue(payload.endsAt');
+    const open = APP_JS.indexOf('form.querySelector(\'[name="endsAt"]\').value = floating ? floating.end');
     expect(open).toBeGreaterThan(-1);
     expect(APP_JS.indexOf("syncTimeStep(form);", open) - open, "没紧跟在赋值后面").toBeLessThan(200);
   });
@@ -366,7 +366,7 @@ describe("calendar-app.js 的表单确实走这套规则", () => {
   it("全天事件的 recurrenceId 是那一天的 UTC 午夜，不是本地午夜（差一个时区偏移，「只删这一次」就对不上）", () => {
     const fn = /function occurrenceRefIso\([\s\S]*?\n  \}/.exec(APP_JS);
     expect(fn, "找不到 occurrenceRefIso").toBeTruthy();
-    expect(fn![0]).toMatch(/isAllDay \? toLocalDateValue\(d\) \+ "T00:00:00\.000Z"/);
+    expect(fn![0]).toContain('(typeof start === "string" ? start.slice(0, 10) : toLocalDateValue(d)) + "T00:00:00.000Z"');
     expect(APP_JS).toMatch(/recIso = occurrenceRefIso\(r, !!payload\.allDay\)/);
     // 三处都走它：点开、拖动某一次 / 以后、拖动所有
     expect(APP_JS.match(/occurrenceRefIso\(event\.start, !!event\.isAllday\)/g)).toHaveLength(2);

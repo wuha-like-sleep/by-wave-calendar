@@ -21,6 +21,7 @@
 // 后者装着入会密码。要完整内容就走 ①②里的第二条。
 
 import { vi, beforeAll, beforeEach, afterEach, describe, it, expect } from "vitest";
+import { eq } from "drizzle-orm";
 
 vi.mock("../../src/db/client.js", async () => {
   const h = await import("./harness.js");
@@ -131,6 +132,53 @@ describe("搜索结果要带上「该怎么解释这条记录」的字段", () =
     await seed({ extra: { meetingPassword: "hunter2", url: "https://meet.example.com/x" } });
     const r = await searchOne();
     expect(JSON.stringify(r), "入会密码进了搜索结果").not.toContain("hunter2");
+  });
+
+  it("来源时区只回验证过的单一区域，保留活动优先/日历回落且不泄露 extra", async () => {
+    await db.update(schema.calendars).set({ timezone: "Australia/Melbourne" }).where(eq(schema.calendars.id, cal.id));
+    const unknownCal = await makeCalendar(user.id, "Unknown zone");
+    await db.update(schema.calendars).set({ timezone: "Invalid/Zone" }).where(eq(schema.calendars.id, unknownCal.id));
+    const utcIcs = "BEGIN:VEVENT\r\nDTSTART:20260714T000000Z\r\nDTEND:20260714T010000Z\r\nEND:VEVENT";
+    const cases: Array<[Partial<typeof schema.events.$inferInsert>, string | null]> = [
+      // Stored event context wins even if the resource serializes instants as Z.
+      [{ extra: { timezone: "PRC", meetingPassword: "search-zone-secret", attendees: ["private-trip@example.test"] }, rawIcs: utcIcs }, "Asia/Shanghai"],
+      [{ extra: { timezone: "UTC" } }, "UTC"],
+      [{ extra: null, rawIcs: utcIcs }, "Australia/Melbourne"],
+      [{ extra: { timezone: "Invalid/Zone" } }, "Australia/Melbourne"],
+      [{ extra: { timezone: "Australia/Melbourne", endTimezone: "Asia/Shanghai" } }, null],
+      [{ extra: { endTimezone: "Asia/Shanghai" } }, null],
+      [{ extra: { timezone: "Asia/Shanghai", endTimezone: "PRC" } }, "Asia/Shanghai"],
+      [{ extra: { endTimezone: "Invalid/Zone" } }, "Australia/Melbourne"],
+      [{ allDay: true, extra: { timezone: "Australia/Melbourne" } }, null],
+      [{ calendarId: unknownCal.id, extra: { timezone: "+08:00" } }, null],
+    ];
+    const expected = new Map<string, string | null>();
+    for (const [values, timezone] of cases) {
+      const row = await seed({ ...values, summary: "来源时区核对" });
+      expected.set(row.id, timezone);
+    }
+    // The same field is available for shared calendars, without widening access.
+    const other = await makeUser("source-owner@example.test");
+    const shared = await makeCalendar(other.id, "Shared source");
+    await makeMembership(shared.id, user.id);
+    const visible = await seed({ calendarId: shared.id, summary: "来源时区核对", extra: { timezone: "Australia/Melbourne" } });
+    expected.set(visible.id, "Australia/Melbourne");
+    const privateCal = await makeCalendar(other.id, "Private source");
+    await seed({ calendarId: privateCal.id, summary: "来源时区核对", extra: { timezone: "Asia/Tokyo" } });
+
+    const res = await app.inject({ method: "GET", url: `/api/search?q=${encodeURIComponent("来源时区核对")}`, headers: { cookie } });
+    expect(res.statusCode).toBe(200);
+    const rows = (JSON.parse(res.body) as { events: Row[] }).events;
+    expect(rows).toHaveLength(expected.size);
+    for (const row of rows) {
+      expect(expected.has(row.id as string)).toBe(true);
+      expect(row.sourceTimezone, row.id as string).toBe(expected.get(row.id as string));
+      expect(row).not.toHaveProperty("extra");
+      expect(row).not.toHaveProperty("rawIcs");
+      expect(row).not.toHaveProperty("description");
+    }
+    expect(res.body).not.toContain("search-zone-secret");
+    expect(res.body).not.toContain("private-trip@example.test");
   });
 });
 

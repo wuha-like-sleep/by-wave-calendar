@@ -1,9 +1,13 @@
 import { z } from "zod";
 import { contentSchema, SyncConflictError, SyncUnavailableError, type SyncContent, type SyncItem } from "./model.js";
+import { equivalentSyncZone, microsoftSourceZone, unambiguousWallTime } from "./zones.js";
 
 const GRAPH = "https://graph.microsoft.com/v1.0";
 const LOGIN = "https://login.microsoftonline.com/common/oauth2/v2.0";
 const SCOPES = "https://graph.microsoft.com/Calendars.ReadWrite https://graph.microsoft.com/User.Read offline_access";
+export const SOURCE_ZONE_PROPERTY = "String {b0be23af-6003-4fb2-8ce7-3d3b6f868c3e} Name ByWaveSourceTimeZones";
+const SOURCE_ZONE_EXPAND = "singleValueExtendedProperties($filter=id eq '" + SOURCE_ZONE_PROPERTY + "')";
+const sourceMetadataSchema = z.object({ startsAt: z.iso.datetime(), endsAt: z.iso.datetime(), timezone: z.string().max(100), endTimezone: z.string().max(100), utcStart: z.boolean(), utcEnd: z.boolean() });
 const tokenSchema = z.object({ access_token: z.string().min(1), refresh_token: z.string().min(1).optional(), expires_in: z.number().positive() });
 export type MicrosoftTokens = z.infer<typeof tokenSchema>;
 const eventSchema = z.object({
@@ -11,8 +15,9 @@ const eventSchema = z.object({
   subject: z.string().nullable().optional(), body: z.object({ content: z.string(), contentType: z.string() }).optional(),
   location: z.object({ displayName: z.string().nullable().optional() }).optional(),
   start: z.object({ dateTime: z.string(), timeZone: z.string() }), end: z.object({ dateTime: z.string(), timeZone: z.string() }),
-  isAllDay: z.boolean(), isCancelled: z.boolean().optional(), originalStartTimeZone: z.string().optional(),
+  isAllDay: z.boolean(), isCancelled: z.boolean().optional(), originalStartTimeZone: z.string().optional(), originalEndTimeZone: z.string().optional(),
   transactionId: z.string().nullable().optional(), type: z.string().optional(),
+  singleValueExtendedProperties: z.array(z.object({ id: z.string(), value: z.string() })).optional(),
 });
 export type MicrosoftEvent = z.infer<typeof eventSchema>;
 export class MicrosoftError extends SyncUnavailableError {
@@ -42,6 +47,7 @@ async function boundedJson(response: Response): Promise<unknown> {
   return JSON.parse(Buffer.concat(chunks).toString("utf8"));
 }
 export class MicrosoftClient {
+  private supportedZones?: Promise<string[]>;
   constructor(private readonly token: string, private readonly fetcher: typeof fetch = fetch) {}
   async request(path: string, method = "GET", body?: unknown, revision?: string, timezone = "UTC"): Promise<unknown> {
     if (!/^[A-Za-z0-9_+./() -]{1,100}$/.test(timezone)) throw new SyncUnavailableError("unsupported_timezone");
@@ -91,7 +97,7 @@ export class MicrosoftClient {
   }
   private eventPath(calendarId: string, id: string) { return "/me/calendars/" + encodeURIComponent(calendarId) + "/events/" + encodeURIComponent(id); }
   async get(calendarId: string, id: string): Promise<SyncItem | null> {
-    try { return this.item(calendarId, eventSchema.parse(await this.request(this.eventPath(calendarId, id)))); }
+    try { return this.item(calendarId, eventSchema.parse(await this.request(this.eventPath(calendarId, id) + "?" + new URLSearchParams({ "$expand": SOURCE_ZONE_EXPAND })))); }
     catch (e) { if (e instanceof MicrosoftError && e.status === 404) return null; throw e; }
   }
   private async item(calendarId: string, event: MicrosoftEvent): Promise<SyncItem | null> {
@@ -107,7 +113,7 @@ export class MicrosoftClient {
     // A missing or revoked calendar is an error, never an empty event list.
     const calendar = z.object({ canEdit: z.boolean() }).parse(await this.request("/me/calendars/" + encodeURIComponent(calendarId) + "?$select=canEdit"));
     if (!calendar.canEdit) throw new SyncUnavailableError("calendar_read_only");
-    const query = new URLSearchParams({ startDateTime: from, endDateTime: to, "$top": "100" });
+    const query = new URLSearchParams({ startDateTime: from, endDateTime: to, "$top": "100", "$expand": SOURCE_ZONE_EXPAND });
     const rows = await this.pages("/me/calendars/" + encodeURIComponent(calendarId) + "/calendarView?" + query);
     const items = new Map<string, SyncItem>();
     for (const row of rows) { const item = await this.item(calendarId, eventSchema.parse(row)); if (item) items.set(item.id, item); }
@@ -135,7 +141,7 @@ export class MicrosoftClient {
   async findOrigin(calendarId: string, origin: string): Promise<SyncItem | null> {
     // Only needed to recover an interrupted create. Enumerating every event
     // also finds a newly-created item that an editor moved outside the window.
-    const rows = await this.pages("/me/calendars/" + encodeURIComponent(calendarId) + "/events?$top=100");
+    const rows = await this.pages("/me/calendars/" + encodeURIComponent(calendarId) + "/events?" + new URLSearchParams({ "$top": "100", "$expand": SOURCE_ZONE_EXPAND }));
     for (const row of rows) {
       const event = eventSchema.parse(row);
       if (event.transactionId === origin) return this.item(calendarId, event);
@@ -143,16 +149,54 @@ export class MicrosoftClient {
     return null;
   }
   async save(calendarId: string, content: SyncContent, current?: SyncItem, transactionId?: string): Promise<SyncItem> {
+    content = contentSchema.parse(content);
     const path = current ? this.eventPath(calendarId, current.id) : "/me/calendars/" + encodeURIComponent(calendarId) + "/events";
+    const dateField = async (iso: string, zone: string | undefined) => {
+      if (content.allDay || !zone || zone === "UTC") return { dateTime: iso.replace(/Z$/, ""), timeZone: "UTC" };
+      this.supportedZones ??= this.pages("/me/outlook/supportedTimeZones(TimeZoneStandard=microsoft.graph.timeZoneStandard'Iana')")
+        .then(rows => z.array(z.object({ alias: z.string() })).parse(rows).map(row => row.alias));
+      const supported = await this.supportedZones;
+      const selected = supported.includes(zone) ? zone : supported.find(alias => equivalentSyncZone(alias, zone, content.startsAt, content.endsAt));
+      // A valid IANA source can be absent from this mailbox's supported
+      // set. Preserve its exact instant in UTC and bind its source below;
+      // authentication/network failures still propagate from the lookup.
+      if (!selected) return { dateTime: iso.replace(/Z$/, ""), timeZone: "UTC" };
+      const dateTime = unambiguousWallTime(iso, selected);
+      if (!dateTime) return { dateTime: iso.replace(/Z$/, ""), timeZone: "UTC" };
+      return { dateTime, timeZone: selected };
+    };
+    const originZone = content.timezone ?? current?.content.timezone;
+    const endZone = content.endTimezone === null ? originZone : content.endTimezone ?? current?.content.endTimezone ?? originZone;
+    const sameStart = current && current.content.allDay === content.allDay && current.content.startsAt === content.startsAt &&
+      (content.timezone === undefined || equivalentSyncZone(originZone, current.content.timezone, content.startsAt, content.endsAt));
+    const sameEnd = current && current.content.allDay === content.allDay && current.content.endsAt === content.endsAt &&
+      (content.endTimezone === undefined && content.timezone === undefined || equivalentSyncZone(endZone, current.content.endTimezone ?? current.content.timezone, content.startsAt, content.endsAt));
+    const start = sameStart ? undefined : await dateField(content.startsAt, originZone);
+    const end = sameEnd ? undefined : await dateField(content.endsAt, endZone);
+    const utcStart = sameStart ? current?.timeZoneTransport?.utcStart === true : !!start && start.timeZone === "UTC" && !!originZone && originZone !== "UTC";
+    const utcEnd = sameEnd ? current?.timeZoneTransport?.utcEnd === true : !!end && end.timeZone === "UTC" && !!endZone && endZone !== "UTC";
+    const metadata = !content.allDay && (originZone || endZone) ? {
+      startsAt: content.startsAt, endsAt: content.endsAt, timezone: originZone ?? "UTC", endTimezone: endZone ?? originZone ?? "UTC", utcStart, utcEnd,
+    } : null;
+    const extension = (start || end) && (originZone || endZone) ? [{ id: SOURCE_ZONE_PROPERTY, value: JSON.stringify(metadata ?? {}) }] : undefined;
     const body = {
-      subject: content.summary, body: { contentType: "text", content: content.description },
-      location: { displayName: content.location }, isAllDay: content.allDay,
-      start: { dateTime: content.startsAt.replace(/Z$/, ""), timeZone: "UTC" },
-      end: { dateTime: content.endsAt.replace(/Z$/, ""), timeZone: "UTC" },
+      ...(current?.content.summary === content.summary ? {} : { subject: content.summary }),
+      ...(current?.content.description === content.description ? {} : { body: { contentType: "text", content: content.description } }),
+      ...(current?.content.location === content.location ? {} : { location: { displayName: content.location } }),
+      ...(current?.content.allDay === content.allDay ? {} : { isAllDay: content.allDay }),
+      ...(start ? { start } : {}), ...(end ? { end } : {}),
+      ...(extension ? { singleValueExtendedProperties: extension } : {}),
       ...(!current && transactionId ? { transactionId } : {}),
     };
-    const result = await this.item(calendarId, eventSchema.parse(await this.request(path, current ? "PATCH" : "POST", body, current?.revision)));
+    const response = eventSchema.parse(await this.request(path, current ? "PATCH" : "POST", body, current?.revision));
+    // Graph's mutation response need not expand the custom property. The
+    // acknowledged value is still the one included in this successful write.
+    if (extension) response.singleValueExtendedProperties = extension;
+    const result = await this.item(calendarId, response);
     if (!result) throw new SyncConflictError();
+    if (sameStart && result.content.startsAt === content.startsAt && current?.content.timezone) result.content.timezone = current.content.timezone;
+    if (sameEnd && result.content.endsAt === content.endsAt && current?.content.endTimezone !== undefined) result.content.endTimezone = current.content.endTimezone;
+    if (!extension && current?.timeZoneTransport) result.timeZoneTransport = current.timeZoneTransport;
     return result;
   }
   async remove(calendarId: string, current: SyncItem): Promise<void> {
@@ -162,15 +206,49 @@ export class MicrosoftClient {
 }
 export function microsoftItem(event: MicrosoftEvent): SyncItem {
   if (event.body?.contentType.toLowerCase() === "html") throw new SyncUnavailableError("microsoft_text_response_required");
-  const instant = (value: string) => new Date(/[zZ]|[+-]\d{2}:\d{2}$/.test(value) ? value : value + "Z").toISOString();
+  const instant = (value: { dateTime: string; timeZone: string }) => {
+    const explicit = /[zZ]|[+-]\d{2}:\d{2}$/.test(value.dateTime);
+    if (!explicit && microsoftSourceZone(value.timeZone) !== "UTC") throw new SyncUnavailableError("microsoft_utc_response_required");
+    return new Date(explicit ? value.dateTime : value.dateTime + "Z").toISOString();
+  };
   const date = (value: string) => value.slice(0, 10) + "T00:00:00.000Z";
+  let sourceZone = microsoftSourceZone(event.originalStartTimeZone);
+  let arrivalZone = microsoftSourceZone(event.originalEndTimeZone);
+  const transport = { utcStart: false, utcEnd: false };
+  const property = event.singleValueExtendedProperties?.find(value => value.id === SOURCE_ZONE_PROPERTY)?.value;
+  if (!event.isAllDay && property && property.length <= 1024) {
+    try {
+      const parsed = sourceMetadataSchema.safeParse(JSON.parse(property));
+      if (parsed.success) {
+        const metadata = parsed.data;
+        // Restore an exact source city after Windows' many-to-one mapping,
+        // or after this adapter's precise UTC fold transport. Native zone
+        // edits outside that mapping win; time edits invalidate old bindings.
+        if ((metadata.utcStart && sourceZone === "UTC") || equivalentSyncZone(sourceZone, metadata.timezone, metadata.startsAt, metadata.endsAt)) {
+          const matches = instant(event.start) === metadata.startsAt;
+          transport.utcStart = metadata.utcStart && matches;
+          sourceZone = matches ? microsoftSourceZone(metadata.timezone) : metadata.utcStart && sourceZone === "UTC" ? undefined : sourceZone;
+        }
+        if ((metadata.utcEnd && arrivalZone === "UTC") || equivalentSyncZone(arrivalZone, metadata.endTimezone, metadata.startsAt, metadata.endsAt)) {
+          const matches = instant(event.end) === metadata.endsAt;
+          transport.utcEnd = metadata.utcEnd && matches;
+          arrivalZone = matches ? microsoftSourceZone(metadata.endTimezone) : metadata.utcEnd && arrivalZone === "UTC" ? undefined : arrivalZone;
+        }
+      }
+    } catch { /* Unknown extension formats do not replace native metadata. */ }
+  }
   const content = contentSchema.parse({
     summary: event.subject?.trim() || "Untitled", description: event.body?.content ?? "", location: event.location?.displayName ?? "",
-    startsAt: event.isAllDay ? date(event.start.dateTime) : instant(event.start.dateTime),
-    endsAt: event.isAllDay ? date(event.end.dateTime) : instant(event.end.dateTime), allDay: event.isAllDay,
+    startsAt: event.isAllDay ? date(event.start.dateTime) : instant(event.start),
+    endsAt: event.isAllDay ? date(event.end.dateTime) : instant(event.end), allDay: event.isAllDay,
+    ...(!event.isAllDay ? {
+      timezone: sourceZone,
+      endTimezone: arrivalZone === undefined ? undefined : arrivalZone === sourceZone ? null : arrivalZone,
+    } : {}),
   });
   if (content.endsAt <= content.startsAt) throw new SyncUnavailableError("invalid_event_dates");
-  return { id: event.id, revision: event["@odata.etag"] ?? 'W/"' + event.changeKey + '"', content, ...(event.transactionId ? { origin: event.transactionId } : {}) };
+  return { id: event.id, revision: event["@odata.etag"] ?? 'W/"' + event.changeKey + '"', content, ...(event.transactionId ? { origin: event.transactionId } : {}),
+    ...(transport.utcStart || transport.utcEnd ? { timeZoneTransport: transport } : {}) };
 }
 async function authorization(path: string, fields: Record<string, string>, fetcher: typeof fetch = fetch) {
   const response = await fetcher(LOGIN + path, { method: "POST", redirect: "error", signal: AbortSignal.timeout(20_000), headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams(fields) });

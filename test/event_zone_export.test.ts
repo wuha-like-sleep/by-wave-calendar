@@ -99,8 +99,12 @@ describe("timeZoneToPinOnCopy：收到邀请后抄进自己日历的副本钉哪
       allDay: false, extra: null, calendarTimezone: "Australia/Melbourne", rrule: "FREQ=WEEKLY", rawStartIsUtc: true,
     })).toBe("UTC");
   });
-  it("不重复、全天、本来就有时区的：不钉", () => {
-    expect(timeZoneToPinOnCopy({ allDay: false, extra: null, calendarTimezone: "Australia/Melbourne", rrule: null })).toBeNull();
+  it("keeps the original calendar timezone on single-event copies", () => {
+    expect(timeZoneToPinOnCopy({ allDay: false, extra: null, calendarTimezone: "Australia/Melbourne", rrule: null })).toBe("Australia/Melbourne");
+    expect(timeZoneToPinOnCopy({ allDay: false, extra: null, calendarTimezone: null, rrule: null })).toBeNull();
+    expect(timeZoneToPinOnCopy({ allDay: false, extra: { timezone: "Asia/Tokyo" }, calendarTimezone: "Australia/Melbourne", rrule: null })).toBeNull();
+  });
+  it("全天或本来就有时区的重复事件不额外设置", () => {
     expect(timeZoneToPinOnCopy({ allDay: true, extra: null, calendarTimezone: "Australia/Melbourne", rrule: "FREQ=WEEKLY" })).toBeNull();
     expect(timeZoneToPinOnCopy({ allDay: false, extra: { timezone: "Asia/Tokyo" }, calendarTimezone: "Australia/Melbourne", rrule: "FREQ=WEEKLY" }))
       .toBeNull();
@@ -112,9 +116,17 @@ describe("exportTimeZone：合成的 VEVENT 带不带 TZID", () => {
     expect(exportTimeZone({ allDay: false, extra: null, calendarTimezone: "Australia/Melbourne", rrule: "FREQ=WEEKLY" }))
       .toBe("Australia/Melbourne");
   });
-  it("不重复、也没有自己时区的：写 UTC（null）", () => {
-    expect(exportTimeZone({ allDay: false, extra: null, calendarTimezone: "Australia/Melbourne", rrule: null })).toBeNull();
-    expect(exportTimeZone({ allDay: false, extra: null, calendarTimezone: "Australia/Melbourne", rrule: "" })).toBeNull();
+  it("单次事件也保留来源日历区，转换一次后回读绝对时刻不变", () => {
+    for (const rrule of [null, ""]) {
+      const timezone = exportTimeZone({ allDay: false, extra: null, calendarTimezone: "Australia/Melbourne", rrule });
+      expect(timezone).toBe("Australia/Melbourne");
+      const startsAt = new Date("2026-11-28T13:30:00Z"), endsAt = new Date("2026-11-28T14:30:00Z");
+      const serialized = serializeEvent({ uid: "single-zone", summary: "Meeting", startsAt, endsAt, allDay: false, timezone });
+      expect(serialized).toContain("DTSTART;TZID=Australia/Melbourne:20261129T003000");
+      const parsed = parseEvent(serialized)!;
+      expect(parsed.startsAt).toEqual(startsAt); expect(parsed.endsAt).toEqual(endsAt);
+      expect(parsed.timezone).toBe("Australia/Melbourne");
+    }
   });
   it("有自己的时区照旧带上；全天不带；日历时区就是 UTC 时写成 …Z", () => {
     expect(exportTimeZone({ allDay: false, extra: { timezone: "Asia/Shanghai" }, calendarTimezone: "UTC", rrule: null }))

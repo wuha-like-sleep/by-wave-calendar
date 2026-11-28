@@ -45,7 +45,10 @@
             </ul>
             <div id="slot-grid" class="grid grid-cols-3 gap-2 content-start"></div>
           </div>
-          <p id="selected-slot-summary" role="status" aria-live="polite" class="hidden mt-3 rounded-lg bg-brand-50 px-3 py-2 text-sm text-brand-700"></p>
+          <div id="selected-slot-summary" role="status" aria-live="polite" class="hidden mt-3 rounded-lg bg-brand-50 px-3 py-2 text-sm text-brand-700">
+            <p id="selected-slot-primary"></p>
+            <p id="selected-slot-reference" class="hidden mt-1 text-xs"></p>
+          </div>
         </div>
 
         <!-- Guest info -->
@@ -89,6 +92,8 @@
   const confirm = document.getElementById("confirm-btn");
   const form = document.getElementById("booking-form");
   const summary = document.getElementById("selected-slot-summary");
+  const primaryTime = document.getElementById("selected-slot-primary");
+  const referenceTime = document.getElementById("selected-slot-reference");
   const zoneSelect = document.getElementById("booking-timezone");
   const zoneNote = document.getElementById("booking-zone-note");
   const guestTimeZone = document.getElementById("guest-timezone");
@@ -97,7 +102,7 @@
   let activeDate = "";
   let submitting = false;
   let displayZone = "", deviceZone = "", allSlots = [];
-  let timeFormat, offsetFormat, dayFormat, summaryFormat;
+  let timeFormat, offsetFormat, dayFormat, summaryFormat, referenceFormat, referenceLabel;
   const fmt = (iso, offset = false) => (offset ? offsetFormat : timeFormat).format(new Date(iso));
   const dateKey = (iso) => {
     const parts = dayFormat.formatToParts(new Date(iso));
@@ -118,9 +123,12 @@
       button.setAttribute("aria-pressed", String(selected));
     });
     summary.classList.toggle("hidden", !slot);
-    summary.textContent = slot ? summaryFormat.format(new Date(slot.startsAt)) + " · " + fmt(slot.startsAt, true) + "–"
+    primaryTime.textContent = slot ? summaryFormat.format(new Date(slot.startsAt)) + " · " + fmt(slot.startsAt, true) + "–"
       + (dateKey(slot.endsAt) !== dateKey(slot.startsAt) ? dateKey(slot.endsAt) + " " : "")
       + fmt(slot.endsAt, true) + " (" + displayZone + ")" : "";
+    referenceTime.classList.toggle("hidden", !slot || !referenceFormat);
+    referenceTime.textContent = slot && referenceFormat ? referenceLabel + " · "
+      + referenceFormat.format(new Date(slot.startsAt)) + " – " + referenceFormat.format(new Date(slot.endsAt)) : "";
   }
   function renderSlots(date) {
     activeDate = date;
@@ -146,7 +154,9 @@
       // 01:30. Include the zone abbreviation for those otherwise identical slots.
       const repeated = clockCounts.get(fmt(s.startsAt)) > 1;
       btn.textContent = fmt(s.startsAt, repeated);
-      btn.setAttribute("aria-label", date + " " + fmt(s.startsAt, true) + "–" + fmt(s.endsAt, true) + " (" + displayZone + ")");
+      const endDate = dateKey(s.endsAt);
+      btn.setAttribute("aria-label", date + " " + fmt(s.startsAt, true) + "–"
+        + (endDate === date ? "" : endDate + " ") + fmt(s.endsAt, true) + " (" + displayZone + ")");
       slotGrid.appendChild(btn);
     });
   }
@@ -161,6 +171,12 @@
     offsetFormat = new Intl.DateTimeFormat(LOCALE, { timeZone: displayZone, hour: "2-digit", minute: "2-digit", hourCycle: "h23", timeZoneName: "short" });
     dayFormat = new Intl.DateTimeFormat("en-US", { timeZone: displayZone, year: "numeric", month: "2-digit", day: "2-digit" });
     summaryFormat = new Intl.DateTimeFormat(LOCALE, { timeZone: displayZone, year: "numeric", month: "long", day: "numeric", weekday: "short" });
+    const referenceZone = choice === "host" ? currentDeviceZone : HOST_ZONE;
+    referenceLabel = (choice === "host" ? COPY.device : COPY.host).replace("{tz}", referenceZone);
+    referenceFormat = displayZone === referenceZone ? null : new Intl.DateTimeFormat(LOCALE, {
+      timeZone: referenceZone, year: "numeric", month: "short", day: "numeric",
+      hour: "2-digit", minute: "2-digit", hourCycle: "h23", timeZoneName: "shortOffset"
+    });
     zoneSelect.replaceChildren();
     for (const [value, zone, label] of [["device", deviceZone, COPY.device], ["host", HOST_ZONE, COPY.host]]) {
       const option = document.createElement("option"); option.value = value;

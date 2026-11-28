@@ -29,7 +29,8 @@ import { db, schema } from "../db/client.js";
 import { requireUserOrSend } from "../lib/session.js";
 import { parseSearchTerms, likeNeedle, textMatchesAllTerms, eventRelevance } from "../lib/search_query.js";
 import { expandEvent } from "../lib/rrule_expand.js";
-import { expansionTimeZone, rawIcsStartIsUtc } from "../lib/event_zone.js";
+import { expansionTimeZone, extraTimeZoneOf, rawIcsStartIsUtc } from "../lib/event_zone.js";
+import { canonicalTimeZone } from "../lib/zoned_time.js";
 
 const MAX_CALENDAR_RESULTS = 8;
 const MAX_BOOKING_RESULTS = 8;
@@ -50,8 +51,7 @@ export async function searchRoutes(app: FastifyInstance) {
     const limit = parsed.data.limit;
 
     // ---- ISOLATION BOUNDARY: the calendars this user may see ----
-    // timezone 只在服务端内部用来算重复事件的下一次发生（见下面 nextStartsAt），
-    // 不进返回 —— 返回的日历形状和以前一样只有 name / color。
+    // 日历时区用于重复展开和事件来源展示；日历搜索项本身仍只回 name / color。
     const owned = await db
       .select({ id: schema.calendars.id, name: schema.calendars.name, color: schema.calendars.color, timezone: schema.calendars.timezone })
       .from(schema.calendars)
@@ -78,8 +78,7 @@ export async function searchRoutes(app: FastifyInstance) {
     type EventRow = {
       id: string; calendarId: string; summary: string; location: string | null;
       startsAt: Date; endsAt: Date; allDay: boolean; rrule: string | null;
-      // 下面三个只在服务端内部用来算 nextStartsAt（展开要按事件自己的时区，
-      // 见 event_zone.ts），**不进返回** —— extra 里有入会密码，文件头的规矩不变。
+      // 下面三个仅供内部展开和提取白名单来源时区，**不进返回** —— extra 里有入会密码。
       exdates: unknown; extra: unknown; rawIcs: string | null;
       updatedAt: Date;
     };
@@ -167,6 +166,18 @@ export async function searchRoutes(app: FastifyInstance) {
       }
       return null;
     };
+    const sourceTimezoneOf = (e: EventRow): string | null => {
+      if (e.allDay) return null;
+      const source = extraTimeZoneOf(e.extra)
+        ?? canonicalTimeZone(calById.get(e.calendarId)?.timezone?.trim());
+      const extra = e.extra && typeof e.extra === "object" && !Array.isArray(e.extra)
+        ? e.extra as { endTimezone?: unknown } : null;
+      const end = canonicalTimeZone(typeof extra?.endTimezone === "string" ? extra.endTimezone.trim() : null);
+      // A trip with separate endpoint zones cannot be represented by one
+      // source label. Raw ICS UTC serialization affects recurrence, not
+      // the event's explicitly stored display context.
+      return end && end !== source ? null : source;
+    };
     const events = eventRows.map((e) => ({
       id: e.id,
       calendarId: e.calendarId,
@@ -178,6 +189,7 @@ export async function searchRoutes(app: FastifyInstance) {
       endsAt: e.endsAt,
       allDay: e.allDay,
       rrule: e.rrule,
+      sourceTimezone: sourceTimezoneOf(e),
       nextStartsAt: nextStartsAtOf(e),
     }));
 

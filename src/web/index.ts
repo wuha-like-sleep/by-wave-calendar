@@ -60,7 +60,7 @@ import { listOAuthGrantsForUser, revokeOAuthGrantForUser, oauthScopeDescKey } fr
 import { audit } from "../lib/audit.js";
 import { fetchIcsUrl, importIcsText, previewIcsText, refreshSubscription, type ImportPreview } from "../lib/ics_import.js";
 import { buildIcsFeed } from "../services/ics.js";
-import { rawIcsStartIsUtc, timeZoneToPinOnCopy } from "../lib/event_zone.js";
+import { extraTimeZoneOf, rawIcsStartIsUtc, timeZoneToPinOnCopy } from "../lib/event_zone.js";
 import { listRecentLogins, recordLoginEvent } from "../lib/login_history.js";
 import { recordLoginAuthFailure } from "../lib/security_events.js";
 import { canEdit, canView, isOwner, listMembers, listPendingInvitations, listVisibleCalendarIds } from "../lib/calendar_access.js";
@@ -2251,10 +2251,9 @@ export async function webRoutes(app: FastifyInstance) {
     const copiedExtra: Record<string, unknown> = {
       ...((sourceEvent.extra as Record<string, unknown> | null) ?? {}), importedFromInvite: tok.token,
     };
-    // 重复事件按时区展开（event_zone.ts）。原事件没有自己的时区时用的是**组织者日历**的时区；
-    // 抄进收件人的日历后会改用收件人日历的时区，「每周一」就可能变成别的日子。
-    // 把原来那个时区钉在副本上，两边展开出同一批时刻。
-    if (sourceEvent.rrule && !sourceEvent.allDay) {
+    // Preserve the host's clock when the recipient's calendar has another
+    // timezone. Recurring copies must also keep the original expansion zone.
+    if (!sourceEvent.allDay && (sourceEvent.rrule || !extraTimeZoneOf(sourceEvent.extra))) {
       const [srcCal] = await db.select({ timezone: schema.calendars.timezone })
         .from(schema.calendars).where(eq(schema.calendars.id, sourceEvent.calendarId)).limit(1);
       const pin = timeZoneToPinOnCopy({
@@ -3665,11 +3664,16 @@ export async function webRoutes(app: FastifyInstance) {
 
   app.get<{ Params: { token: string } }>("/book-cancel/:token", async (req, reply) => {
     reply.header("Cache-Control", "no-store");
-    const [b] = await db.select().from(schema.bookings).where(eq(schema.bookings.cancelToken, req.params.token)).limit(1);
+    const [entry] = await db.select({ booking: schema.bookings, source: sql<string | null>`${schema.events.extra} ->> 'timezone'`,
+      calendarZone: schema.calendars.timezone }).from(schema.bookings)
+      .innerJoin(schema.bookingLinks, eq(schema.bookingLinks.id, schema.bookings.linkId))
+      .innerJoin(schema.calendars, eq(schema.calendars.id, schema.bookingLinks.calendarId))
+      .leftJoin(schema.events, eq(schema.events.id, schema.bookings.eventId))
+      .where(eq(schema.bookings.cancelToken, req.params.token)).limit(1);
+    const b = entry?.booking;
     if (!b) return reply.code(404).view("error", { title: tr(req, "page.notFound"), user: null, csrfToken: csrfTokenFor(req), flash: {}, statusCode: 404, heading: tr(req, "errorPage.cancelLinkInvalid.heading"), message: tr(req, "errorPage.cancelLinkInvalid.message") });
-    const [bookingLink] = await db.select({ calendarId: schema.bookingLinks.calendarId }).from(schema.bookingLinks).where(eq(schema.bookingLinks.id, b.linkId));
     return reply.view("booking/cancel", {
-      bookingZone: bookingLink ? await bookingTimeZone(bookingLink) : "UTC",
+      bookingZone: canonicalTimeZone(entry.source) ?? bookingTimeZoneFromCalendar(entry.calendarZone),
       title: tr(req, "page.cancelBooking"),
       user: null, csrfToken: csrfTokenFor(req), flash: readFlash(req, reply),
       booking: b,

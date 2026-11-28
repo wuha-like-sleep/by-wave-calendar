@@ -21,7 +21,7 @@ import path from "node:path";
 import "../src/public/event-store.js";
 
 type Item = { id: number; op: string; eventId: string; giveUp?: boolean };
-type Res = { ok: boolean; status: number; data?: unknown };
+type Res = { ok: boolean; status: number; data?: unknown } | { deferred: true };
 
 const core = (globalThis as unknown as {
   bwcOutboxCore: {
@@ -109,6 +109,13 @@ describe("drainOutbox — 服务端拒绝的那一条", () => {
     const h = harness(() => ({ ok: false, status: 403, data: { error: "forbidden" } }));
     await core.drainOutbox([item(1)], h.ctx);
     expect(h.log).not.toContain("applied:1");
+  });
+
+  it("等待离线新建的编辑保留在队列中，其余事件继续同步", async () => {
+    const h = harness(it => it.id === 1 ? { deferred: true } : ok());
+    const stats = await core.drainOutbox([item(1), item(2)], h.ctx);
+    expect(h.log).toEqual(["send:1", "send:2", "applied:2", "remove:2"]);
+    expect(stats).toEqual({ sent: 1, rejected: 0, skipped: 1, blocked: false });
   });
 });
 

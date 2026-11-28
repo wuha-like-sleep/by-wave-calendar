@@ -13,6 +13,7 @@
         <div class="font-medium"><%= booking.guestName %> &lt;<%= booking.guestEmail %>&gt;</div>
         <p id="booking-cancel-time" aria-live="polite" class="mt-2 font-medium" data-start="<%= booking.startsAt.toISOString() %>" data-end="<%= booking.endsAt.toISOString() %>"><%= new Intl.DateTimeFormat(currentLocale, { timeZone: sourceZone, dateStyle: "medium", timeStyle: "short", hourCycle: "h23" }).format(booking.startsAt) %> – <%= new Intl.DateTimeFormat(currentLocale, { timeZone: sourceZone, dateStyle: "medium", timeStyle: "short", hourCycle: "h23" }).format(booking.endsAt) %></p>
         <p id="booking-zone-note" class="mt-1 text-xs text-slate-500"><%= t("booking.public.timezoneNote", { tz: sourceZone }) %></p>
+        <p id="booking-cancel-reference" class="hidden mt-1 text-xs text-slate-500"></p>
         <label class="block text-xs text-slate-500 mt-3">
           <span class="block mb-1"><%= t("booking.public.displayTimezone") %></span>
           <select id="booking-timezone" class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700">
@@ -48,8 +49,18 @@
       const option = document.createElement("option"); option.value = value; option.textContent = label.replace("{tz}", timezone); select.appendChild(option);
     }
     select.value = mode; note.textContent = copy.note.replace("{tz}", zone);
-    const format = new Intl.DateTimeFormat(locale, { timeZone: zone, year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", hourCycle: "h23", timeZoneName: "short" });
-    time.textContent = format.format(new Date(time.dataset.start)) + " – " + format.format(new Date(time.dataset.end));
+    const formatIn = timezone => new Intl.DateTimeFormat(locale, { timeZone: timezone, year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", hourCycle: "h23", timeZoneName: "short" });
+    const start = new Date(time.dataset.start), end = new Date(time.dataset.end);
+    const range = timezone => {
+      const format = formatIn(timezone);
+      return format.format(start) + " – " + format.format(end);
+    };
+    time.textContent = range(zone);
+    const reference = document.getElementById("booking-cancel-reference");
+    const referenceZone = mode === "host" ? device : hostZone;
+    reference.classList.toggle("hidden", referenceZone === zone);
+    reference.textContent = referenceZone === zone ? "" : (mode === "host" ? copy.device : copy.host).replace("{tz}", referenceZone)
+      + " · " + range(referenceZone);
   }
   select.value = ""; refresh(true);
   select.addEventListener("change", () => refresh(true));

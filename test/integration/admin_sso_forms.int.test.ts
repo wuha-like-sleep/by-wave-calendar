@@ -1,3 +1,4 @@
+import { makeT } from "../../src/lib/i18n.js";
 import { redirectFlash, flashCookie } from "./flash_helpers.js";
 // Submit the rendered HTML through the real routes. Hand-written request bodies
 // miss browser repairs of nested forms (including duplicate CSRF fields).
@@ -36,7 +37,7 @@ beforeAll(async () => {
   await app.register(formbody);
   await app.register(view, {
     engine: { ejs }, root: path.resolve("src/views"), propertyName: "view", layout: "layout.ejs",
-    defaultContext: { t: (key: string) => key },
+    defaultContext: { t: makeT("zh-CN") },
   });
   await app.register(adminRoutes);
   await app.ready();

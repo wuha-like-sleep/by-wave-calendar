@@ -40,6 +40,31 @@ async function create() {
 async function stored(id: string) { return (await db.select().from(schema.events).where(eq(schema.events.id, id)))[0]!; }
 
 describe("journey endpoint zones through real event routes and storage", () => {
+  it("single-event CalDAV and ICS retain calendar source and UTC writebacks never replace stored origin", async () => {
+    const password = "local-system-zone-test";
+    await db.update(schema.users).set({ passwordHash: await hashPassword(password), passwordSet: true }).where(eq(schema.users.id, cal.ownerId));
+    await db.update(schema.calendars).set({ timezone: "Australia/Melbourne" }).where(eq(schema.calendars.id, cal.id));
+    cal = (await db.select().from(schema.calendars).where(eq(schema.calendars.id, cal.id)))[0]!;
+    invalidateCalDavAuthCache();
+    const [row] = await db.insert(schema.events).values({ calendarId: cal.id, uid: "system-zone-single", summary: "Meeting", startsAt: new Date("2026-11-28T13:30:00Z"), endsAt: new Date("2026-11-28T14:30:00Z") }).returning();
+    const url = `/caldav/${cal.ownerId}/${cal.id}/${row!.uid}.ics`;
+    const authorization = "Basic " + Buffer.from(`traveller@example.test:${password}`).toString("base64");
+    for (const text of [buildIcsFeed(cal, [row!]), (await dav.inject({ method: "GET", url, headers: { authorization } })).body]) {
+      const parsed = parseEvent(text)!;
+      expect(parsed.timezone).toBe("Australia/Melbourne");
+      expect(parsed.startsAt.toISOString()).toBe("2026-11-28T13:30:00.000Z");
+      expect(text).toContain("DTSTART;TZID=Australia/Melbourne:20261129T003000");
+    }
+    await db.update(schema.events).set({ extra: { timezone: "Australia/Melbourne", url: "https://example.test/keep" } }).where(eq(schema.events.id, row!.id));
+    const utcBody = ["BEGIN:VCALENDAR", "VERSION:2.0", serializeEvent({ uid: row!.uid, summary: "Native title", startsAt: row!.startsAt, endsAt: row!.endsAt, allDay: false }), "END:VCALENDAR"].join("\r\n");
+    const updated = await dav.inject({ method: "PUT", url, headers: { authorization, "content-type": "text/calendar" }, payload: utcBody });
+    expect(updated.statusCode, updated.body).toBe(204);
+    const saved = await stored(row!.id);
+    expect(saved.extra).toMatchObject({ timezone: "Australia/Melbourne", url: "https://example.test/keep" });
+    expect(saved.startsAt).toEqual(row!.startsAt); expect(saved.endsAt).toEqual(row!.endsAt);
+    const reread = await dav.inject({ method: "GET", url, headers: { authorization } });
+    expect(reread.body).toContain("DTSTART:20261128T133000Z");
+  });
   it("creates, reads, synchronizes and exports both zones while retaining exact UTC instants", async () => {
     const made = await create();
     expect((await stored(made.id)).extra).toEqual(payload().extra);

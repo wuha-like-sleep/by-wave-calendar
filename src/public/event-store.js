@@ -80,6 +80,9 @@
         stats.blocked = true;
         break;
       }
+      // A dependent edit can wait for its offline create while unrelated
+      // events continue syncing.
+      if (res && res.deferred) { stats.skipped += 1; continue; }
       // 删除那条：404 表示服务端那边本来就没了，和删成功是一个意思。
       const accepted = !!res && (res.ok === true || (item.op === "delete" && res.status === 404));
       if (accepted) {
@@ -124,6 +127,25 @@
   function toLocalRow(e, now) {
     const row = { ...e, id: rowKeyOf(e), _syncedAt: now };
     if (e.rrule) row._masterId = e.id;
+    return row;
+  }
+
+  // PATCH fields are optional. The local display row needs a complete
+  // event, while the outbox must retain exactly the user's partial update.
+  function mergeLocalEvent(base, patch, id) {
+    const { recurrenceId, seriesBase, scope, clientUid, ...fields } = patch;
+    const row = { ...base, ...fields, id, _dirty: true };
+    // A dirty series overlay is keyed by the master, even if the starting
+    // snapshot came from the occurrence the user opened.
+    delete row._masterId;
+    if (fields.extra && typeof fields.extra === "object") {
+      const extra = { ...base?.extra };
+      for (const [key, value] of Object.entries(fields.extra)) {
+        if (value === null) delete extra[key];
+        else if (value !== undefined) extra[key] = value;
+      }
+      row.extra = Object.keys(extra).length ? extra : null;
+    }
     return row;
   }
 
@@ -220,7 +242,7 @@
     return out;
   }
 
-  globalThis.bwcMirrorCore = { rowKeyOf, toLocalRow, planWindowMerge, visibleRows, planDeltaApply, syncPlan };
+  globalThis.bwcMirrorCore = { rowKeyOf, toLocalRow, mergeLocalEvent, planWindowMerge, visibleRows, planDeltaApply, syncPlan };
 
   // 推送信号 → 拉取的节流门（纯逻辑，时钟与定时器由调用方注进来，
   // 所以它在 node 里可以直接被打，见 test/pull_gate.test.ts）。
@@ -305,7 +327,7 @@
   function tx(storeName, mode, fn) {
     return openDB().then((db) => new Promise((resolve, reject) => {
       const t = db.transaction(storeName, mode);
-      const s = t.objectStore(storeName);
+      const s = t.objectStore(Array.isArray(storeName) ? storeName[0] : storeName);
       let result;
       Promise.resolve(fn(s, t)).then((r) => { result = r; }).catch(reject);
       t.oncomplete = () => resolve(result);
@@ -569,60 +591,71 @@
 
   // ---- writes (optimistic) ----
 
-  async function put(event, calendarId) {
-    // Optimistic: write to local mirror immediately with _dirty flag,
-    // queue the server operation in outbox.
+  // An open form or a previously queued edit can still refer to the local
+  // ID after the server has accepted a create. Resolve inside the same IDB
+  // transaction as the write so a finishing sync cannot race this lookup.
+  function resolveEventId(transaction, id, next) {
+    if (!String(id).startsWith("local-")) { next(id); return; }
+    const request = transaction.objectStore(STORE_META).get("created:" + id);
+    request.onsuccess = () => next(request.result?.value || id);
+  }
+
+  async function put(event, calendarId, baseline) {
     const isCreate = !event.id;
     const tempId = isCreate ? "local-" + Date.now() + "-" + Math.random().toString(36).slice(2, 8) : event.id;
-    const localCopy = { ...event, id: tempId, calendarId: calendarId || event.calendarId, _dirty: true };
-
-    await tx(STORE_EVENTS, "readwrite", (s) => s.put(localCopy));
-    invalidateFetch();
-    const payload = { ...event, calendarId: calendarId || event.calendarId };
-    // Idempotency key for creates. The outbox replays at-least-once: if a
-    // create POST commits on the server but its response is lost, the item
-    // stays queued and is retried — previously minting a DUPLICATE event
-    // each time. We send the stable tempId as `clientUid`; it's persisted
-    // in the outbox payload, so every replay carries the same key and the
-    // server collapses retries onto the first row. Updates are keyed by event
-    // id; 「所有事件」的平移不是幂等的，靠 payload 里的 seriesBase 防重发。
+    const payload = { ...event };
+    if (calendarId) payload.calendarId = calendarId;
     if (isCreate) payload.clientUid = tempId;
-    await enqueue({
-      op: isCreate ? "create" : "update",
-      eventId: tempId,
-      payload,
-    });
-    emit("event-changed", { id: tempId, kind: isCreate ? "created" : "updated" });
+
+    // Read, apply and enqueue together so consecutive offline edits merge
+    // with the most recent local copy and a failed transaction leaves no
+    // unsendable dirty row.
+    const localCopy = await tx([STORE_EVENTS, STORE_OUTBOX, STORE_META], "readwrite", (events, transaction) => new Promise(resolve => {
+      function write(id, base) {
+        if (!isCreate) payload.id = id;
+        const row = mirror.mergeLocalEvent(base, payload, id);
+        if (row.startsAt && row.endsAt) events.put(row);
+        transaction.objectStore(STORE_OUTBOX).add({
+          op: isCreate ? "create" : "update", eventId: id, payload, attempts: 0, createdAt: Date.now()
+        });
+        resolve(row);
+      }
+      if (isCreate) { write(tempId); return; }
+      resolveEventId(transaction, tempId, id => {
+        const current = events.get(id);
+        current.onsuccess = () => {
+          if (current.result || !event.recurrenceId) { write(id, current.result || baseline); return; }
+          const occurrence = events.get(id + "@" + event.recurrenceId);
+          occurrence.onsuccess = () => write(id, occurrence.result || baseline);
+        };
+      });
+    }));
+    invalidateFetch();
+    emit("outbox-changed", { count: await pendingCount() });
+    emit("event-changed", { id: localCopy.id, kind: isCreate ? "created" : "updated" });
     syncOutbox();  // best-effort immediate
     return localCopy;
   }
 
   async function remove(eventId) {
     // Optimistic: tombstone the local copy, queue delete.
-    await tx(STORE_EVENTS, "readwrite", (s) => new Promise((resolve) => {
-      const r = s.get(eventId);
-      r.onsuccess = () => {
-        // 重复事件在镜像里只有「id@开始时刻」那些行，id 这个键上没有行，墓碑也要立起来。
-        s.put({ ...(r.result || { id: eventId }), _tombstone: true, _dirty: true });
-        resolve();
-      };
+    const id = await tx([STORE_EVENTS, STORE_OUTBOX, STORE_META], "readwrite", (events, transaction) => new Promise(resolve => {
+      resolveEventId(transaction, eventId, id => {
+        const r = events.get(id);
+        r.onsuccess = () => {
+          events.put({ ...(r.result || { id }), _tombstone: true, _dirty: true });
+          transaction.objectStore(STORE_OUTBOX).add({ op: "delete", eventId: id, payload: null, attempts: 0, createdAt: Date.now() });
+          resolve(id);
+        };
+      });
     }));
     invalidateFetch();
-    await enqueue({ op: "delete", eventId, payload: null });
-    emit("event-changed", { id: eventId, kind: "deleted" });
+    emit("outbox-changed", { count: await pendingCount() });
+    emit("event-changed", { id, kind: "deleted" });
     syncOutbox();
   }
 
   // ---- outbox ----
-
-  async function enqueue(item) {
-    await tx(STORE_OUTBOX, "readwrite", (s) => s.add({
-      ...item,
-      attempts: 0,
-      createdAt: Date.now(),
-    }));
-    emit("outbox-changed", { count: await pendingCount() });
-  }
 
   async function pendingCount() {
     return tx(STORE_OUTBOX, "readonly", (s) => new Promise((resolve) => {
@@ -736,14 +769,21 @@
     if (item.op === "create") {
       return http("POST", "/api/events", item.payload);
     }
+    if (String(item.eventId).startsWith("local-")) {
+      const original = item.eventId;
+      const id = await getMeta("created:" + original);
+      if (!id) {
+        if ((await listOutbox()).some(entry => entry.op === "create" && entry.eventId === original)) return { deferred: true };
+        // A discarded/rejected create never reached the server.
+        return { ok: true, skipped: true };
+      }
+      item.eventId = id;
+      if (item.payload) item.payload = { ...item.payload, id };
+    }
     if (item.op === "update") {
-      // 本地 id 还是 "local-"：create 那条还在队列里排着，它会带上最新的 payload。
-      if (String(item.eventId).startsWith("local-")) return { ok: true, status: 0, data: null, skipped: true };
       return http("PATCH", "/api/events/" + encodeURIComponent(item.eventId), item.payload);
     }
     if (item.op === "delete") {
-      // 从来没发到服务端过，本地丢掉就完了。
-      if (String(item.eventId).startsWith("local-")) return { ok: true, status: 0, data: null, skipped: true };
       return http("DELETE", "/api/events/" + encodeURIComponent(item.eventId));
     }
     // 认不出的 op（旧版本留下的队列）：当作已处理，别把整条队列堵死。
@@ -756,9 +796,27 @@
     if ((item.op === "create" || item.op === "update") && !res.skipped) {
       // 换掉本地那份乐观副本（create 的键是 local-，update 的键是事件 id）。服务端回的是主事件：
       // 重复事件按「id@开始时刻」存；别的那几次由紧接着的 loadEvents 拉回来。
-      await tx(STORE_EVENTS, "readwrite", (s) => {
-        s.delete(item.eventId);
-        s.put(mirror.toLocalRow(res.data, Date.now()));
+      await tx([STORE_EVENTS, STORE_META, STORE_OUTBOX], "readwrite", (events, transaction) => {
+        const canonicalId = res.data.id;
+        if (item.op === "create") transaction.objectStore(STORE_META).put({ key: "created:" + item.eventId, value: canonicalId });
+        const queued = transaction.objectStore(STORE_OUTBOX).getAll();
+        queued.onsuccess = () => {
+          const nextEdit = queued.result.some(other => other.id > item.id &&
+            (other.eventId === item.eventId || other.eventId === canonicalId || other.eventId === res.data.uid));
+          const existing = events.get(item.eventId);
+          existing.onsuccess = () => {
+            if (nextEdit && existing.result?._dirty) {
+              // Never replace a later local edit or pending deletion with an
+              // earlier response. Rename its overlay when the create succeeds.
+              if (item.op === "create") {
+                events.delete(item.eventId);
+                events.put({ ...existing.result, id: canonicalId });
+              }
+              if (item.op === "create" || canonicalId === item.eventId) return;
+            } else events.delete(item.eventId);
+            events.put(mirror.toLocalRow(res.data, Date.now()));
+          };
+        };
       });
       return;
     }

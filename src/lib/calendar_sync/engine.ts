@@ -1,4 +1,4 @@
-import { decide, localOrigin, stableTransactionId, SyncConflictError, SyncUnavailableError, type Conflict, type SyncContent, type SyncItem, type SyncState } from "./model.js";
+import { decide, acknowledgeLink, localOrigin, stableTransactionId, SyncConflictError, SyncUnavailableError, type Conflict, type SyncContent, type SyncItem, type SyncState } from "./model.js";
 
 export interface SyncSide {
   findOrigin?(origin: string): Promise<SyncItem | { deletedId: string } | null>;
@@ -52,7 +52,7 @@ export async function synchronize(pairId: string, state: SyncState, left: SyncSi
       action = resolution.side === "left" ? "to-right" : "to-left";
     }
     if (action === "conflict") { conflicts.push({ key, left: a ?? null, right: b ?? null }); continue; }
-    if (action === "equal") { link.base = a!.content; delete state.resolutions[key]; continue; }
+    if (action === "equal") { acknowledgeLink(link, a!.content, b!.content); delete state.resolutions[key]; continue; }
     if (action === "forget") { state.links = state.links.filter(x => x !== link); delete state.resolutions[key]; continue; }
     if (mutations >= budget) { onDeferred(); continue; }
     await heartbeat();
@@ -69,9 +69,16 @@ export async function synchronize(pairId: string, state: SyncState, left: SyncSi
             origin: action === "to-right" ? stableTransactionId(pairId, source.id + ":restore:" + source.revision) : localOrigin(pairId, source.id + ":restore:" + source.revision), content: source.content };
           await persist(); await finishPending();
         } else {
-          const updated = await adapter.save(source.content, target);
+          const content = { ...source.content };
+          if (action === "to-left" && link.base.timezone === undefined && content.timezone === "UTC" &&
+              (!link.legacyZones?.right.timezone || link.legacyZones.right.timezone === "UTC") && target.content.timezone && target.content.timezone !== "UTC") {
+            // Old Graph mirrors were always created in UTC. Their first
+            // ordinary edit must not erase a known ByWave source region.
+            delete content.timezone; delete content.endTimezone;
+          }
+          const updated = await adapter.save(content, target);
           if (action === "to-right") r.set(updated.id, updated); else l.set(updated.id, updated);
-          link.base = source.content;
+          acknowledgeLink(link, l.get(link.leftId)!.content, r.get(link.rightId)!.content);
         }
       } else {
         if (target) await adapter.remove(target);

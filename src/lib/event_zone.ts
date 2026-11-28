@@ -61,13 +61,13 @@ export function expansionTimeZone(e: EventZoneInputs): string {
   return cal ?? "UTC";
 }
 
-/**
- * 把一个重复事件抄进**另一个**日历（收到邀请后「加到我的日历」）时，副本要钉上的时区。
- * 原事件没有自己的时区时，展开用的是原日历的时区；副本换了日历，不钉的话会改用收件人
- * 日历的时区展开，「每周一」可能变成别的日子。null = 不需要钉（不重复 / 全天 / 本来就有）。
- */
+/** Preserve the organizer's source zone when an invitation is copied to a
+ * different calendar. Recurring copies must also keep their expansion anchor. */
 export function timeZoneToPinOnCopy(e: EventZoneInputs & { rrule: string | null | undefined }): string | null {
-  if (e.allDay || !e.rrule) return null;
+  if (e.allDay) return null;
+  if (!e.rrule) {
+    return extraTimeZoneOf(e.extra) ? null : canonicalTimeZone(e.calendarTimezone?.trim());
+  }
   // 原文是 UTC 写法时，展开按 UTC、不看 extra.timezone；副本没有原文，要把 UTC 钉上。
   if (!e.rawStartIsUtc && extraTimeZoneOf(e.extra)) return null;
   return expansionTimeZone(e);
@@ -80,13 +80,12 @@ export function timeZoneToPinOnCopy(e: EventZoneInputs & { rrule: string | null 
  *   · 原文 DTSTART 是 UTC：null（和展开同一个口径）。
  *   · 有合法的 extra.timezone：一律带上（以前就是这样）；UTC 写成 …Z。
  *   · 重复事件：带上展开用的那个时区，手机照着它展开，才和服务端算出同一批日子。
- *   · 不重复、也没有自己的时区：null。单个时刻写成 UTC 是精确的，不会有歧义。
+ *   · 单次事件也保留有效日历时区，系统日历才不会丢掉活动的来源区域。
  */
 export function exportTimeZone(e: EventZoneInputs & { rrule: string | null | undefined }): string | null {
   if (e.allDay || e.rawStartIsUtc) return null;
   const own = extraTimeZoneOf(e.extra);
   if (own) return own === "UTC" ? null : own;
-  if (!e.rrule) return null;
   const tz = expansionTimeZone(e);
   return tz === "UTC" ? null : tz;
 }

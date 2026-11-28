@@ -7,6 +7,7 @@ import { seriesStartsBetween, exdateMillis } from "../rrule_expand.js";
 import { markEventBookingsCancelled, notifyEventCancellation } from "../event_cancel.js";
 import { contentSchema, SyncConflictError, SyncUnavailableError, localOrigin, type SyncContent, type SyncItem } from "./model.js";
 import type { SyncSide } from "./engine.js";
+import { equivalentSyncZone, sourceZoneFields } from "./zones.js";
 
 type Extra = Record<string, unknown>;
 const extraOf = (row: schema.Event): Extra => row.extra && typeof row.extra === "object" && !Array.isArray(row.extra) ? row.extra as Extra : {};
@@ -26,9 +27,18 @@ export class ByWaveCalendar implements SyncSide {
     return extra.outlookPairId === this.pairId && typeof extra.outlookOccurrenceKey === "string" ? extra.outlookOccurrenceKey : undefined;
   }
   private item(row: schema.Event, timezone: string, at?: Date): SyncItem {
-    const startsAt = at ?? row.startsAt;
-    const endsAt = new Date(startsAt.getTime() + row.endsAt.getTime() - row.startsAt.getTime());
-    const content = contentSchema.parse({ summary: row.summary, description: row.description ?? "", location: row.location ?? "", startsAt: startsAt.toISOString(), endsAt: endsAt.toISOString(), allDay: row.allDay });
+    let startsAt = at ?? row.startsAt;
+    let endsAt = new Date(startsAt.getTime() + row.endsAt.getTime() - row.startsAt.getTime());
+    if (row.allDay) {
+      const day = 86_400_000;
+      startsAt = new Date(Math.floor(startsAt.getTime() / day) * day);
+      const endDay = Math.floor(endsAt.getTime() / day) * day;
+      // Existing data includes both exclusive midnight and inclusive
+      // 23:59:59 ends. Normalize the native snapshot only, not the DB row.
+      endsAt = new Date(endsAt.getTime() === endDay && endDay > startsAt.getTime() ? endDay : endDay + day);
+    }
+    const content = contentSchema.parse({ summary: row.summary, description: row.description ?? "", location: row.location ?? "", startsAt: startsAt.toISOString(), endsAt: endsAt.toISOString(), allDay: row.allDay,
+      ...sourceZoneFields(row.extra, timezone, row.allDay) });
     return { id: this.alias(row) ?? (row.rrule ? row.id + "@" + startsAt.toISOString() : row.id),
       revision: createHash("sha256").update(JSON.stringify([row, timezone, startsAt])).digest("hex"), content,
       ...(row.uid.startsWith("outlook:") ? { origin: row.uid } : {}) };
@@ -104,12 +114,24 @@ export class ByWaveCalendar implements SyncSide {
     const cal = await this.calendar();
     let seriesChange: { before: schema.Event; after: schema.Event } | undefined;
     const saved = await db.transaction(async tx => {
+      const mergedExtra = (existing: Extra = {}): Extra => {
+        const extra = { ...existing };
+        if (!content.allDay) {
+          for (const key of ["timezone", "endTimezone"] as const) {
+            const value = content[key];
+            if (value === undefined) continue;
+            if (value === null) delete extra[key];
+            else if (!equivalentSyncZone(typeof extra[key] === "string" ? extra[key] : undefined, value, content.startsAt, content.endsAt)) extra[key] = value;
+          }
+        }
+        return extra;
+      };
       const fields = { summary: content.summary, description: content.description, location: content.location,
         startsAt: new Date(content.startsAt), endsAt: new Date(content.endsAt), allDay: content.allDay,
         rawIcs: null, updatedAt: new Date() };
       if (!current) {
         if (!origin?.startsWith("outlook:")) throw new SyncUnavailableError("invalid_sync_origin");
-        const [created] = await tx.insert(schema.events).values({ ...fields, calendarId: this.calendarId, uid: origin })
+        const [created] = await tx.insert(schema.events).values({ ...fields, extra: mergedExtra(), calendarId: this.calendarId, uid: origin })
           .onConflictDoNothing({ target: [schema.events.calendarId, schema.events.uid] }).returning();
         const row = created ?? (await tx.select().from(schema.events).where(and(eq(schema.events.calendarId, this.calendarId), eq(schema.events.uid, origin))))[0]!;
         if (row.deletedAt) throw new SyncConflictError();
@@ -126,11 +148,11 @@ export class ByWaveCalendar implements SyncSide {
         const exdates = [...new Set([...(Array.isArray(row.exdates) ? row.exdates as string[] : []), at])];
         const [master] = await tx.update(schema.events).set({ exdates, updatedAt: new Date() }).where(eq(schema.events.id, row.id)).returning();
         const [created] = await tx.insert(schema.events).values({ ...fields, calendarId: this.calendarId, uid: aliasUid,
-          extra: { ...extraOf(row), outlookPairId: this.pairId, outlookOccurrenceKey: key } }).returning();
+          extra: { ...mergedExtra(extraOf(row)), outlookPairId: this.pairId, outlookOccurrenceKey: key } }).returning();
         seriesChange = { before: row, after: master! };
         return this.item(created!, cal.timezone);
       }
-      const [updated] = await tx.update(schema.events).set(fields).where(eq(schema.events.id, row.id)).returning();
+      const [updated] = await tx.update(schema.events).set({ ...fields, extra: mergedExtra(extraOf(row)) }).where(eq(schema.events.id, row.id)).returning();
       return this.item(updated!, cal.timezone);
     });
     this.rememberSeriesChange(seriesChange);

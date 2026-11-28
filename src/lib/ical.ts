@@ -184,6 +184,24 @@ function formatAllDayEnd(startsAt: Date, endsAt: Date): string {
   return formatDate(exclusive < atLeast ? atLeast : exclusive);
 }
 
+const sourceZoneProperties = {
+  DTSTART: "X-BYWAVE-START-TIMEZONE",
+  DTEND: "X-BYWAVE-END-TIMEZONE",
+} as const;
+
+function serializeDateTimeEndpoint(name: keyof typeof sourceZoneProperties, date: Date, zone: string | null, recurring: boolean): string[] {
+  if (!zone) return [`${name}:${formatDateTime(date)}`];
+  const wall = formatWallClockInZone(date, zone);
+  // RFC 5545 §3.3.5 resolves a repeated TZID clock time to its first
+  // occurrence. A single event's second occurrence therefore needs UTC;
+  // keep its source zone separately, without changing either instant.
+  // RRULE clocks must remain anchored to DTSTART's zone.
+  if (!recurring && parseICalDateValue(wall, false, zone).getTime() !== Math.floor(date.getTime() / 1000) * 1000) {
+    return [`${name}:${formatDateTime(date)}`, `${sourceZoneProperties[name]}:${zone}`];
+  }
+  return [`${name};TZID=${zone}:${wall}`];
+}
+
 export function serializeEvent(event: IcalEvent): string {
   // 认不出来的时区名不带 TZID 写出去：以前会写成「TZID=认不出的名字:按 UTC 读出来的
   // 墙上时间」，手机不认识这个 TZID 就当成本机时间，整个事件挪了一个时差。
@@ -197,26 +215,9 @@ export function serializeEvent(event: IcalEvent): string {
   if (event.allDay) {
     lines.push(`DTSTART;VALUE=DATE:${formatDate(event.startsAt)}`);
     lines.push(`DTEND;VALUE=DATE:${formatAllDayEnd(event.startsAt, event.endsAt)}`);
-  } else if (zone) {
-    // Emit wall-clock in the event's zone with TZID parameter. iOS /
-    // macOS / Google / Outlook all render this as "this is 6pm Shanghai
-    // time" — phone shifts the display when the user travels, instead
-    // of statically showing the UTC equivalent. We don't emit a full
-    // VTIMEZONE block — modern clients use the IANA database directly
-    // and tolerate a missing VTIMEZONE per RFC 7986 / common practice.
-    //
-    // 重复事件尤其要带：RRULE 的 BYDAY / BYMONTHDAY 是按 DTSTART 所在时区的日历算的。
-    // 写成 UTC 的话，墨尔本周一 9:30（= UTC 周日 22:30）的「每周一」在手机上落到周二，
-    // 夏令时一切换整体挪一小时 —— 和服务端（按 event_zone.ts 的时区展开）对不上。
-    const wall = formatWallClockInZone(event.startsAt, zone);
-    lines.push(`DTSTART;TZID=${zone}:${wall}`);
   } else {
-    lines.push(`DTSTART:${formatDateTime(event.startsAt)}`);
-  }
-  if (!event.allDay) {
-    lines.push(endZone
-      ? `DTEND;TZID=${endZone}:${formatWallClockInZone(event.endsAt, endZone)}`
-      : `DTEND:${formatDateTime(event.endsAt)}`);
+    lines.push(...serializeDateTimeEndpoint("DTSTART", event.startsAt, zone, !!event.rrule));
+    lines.push(...serializeDateTimeEndpoint("DTEND", event.endsAt, endZone, !!event.rrule));
   }
   lines.push(`SUMMARY:${escapeText(event.summary)}`);
   if (event.location) lines.push(`LOCATION:${escapeText(event.location)}`);
@@ -396,6 +397,15 @@ export function wrapSingleEvent(event: IcalEvent, calendarName: string = ""): st
 
 type ParsedLine = { params: Record<string, string>; value: string };
 
+function sourceZoneFromUtcEndpoint(endpoint: ParsedLine | undefined, property: ParsedLine | undefined): string | null {
+  // These two whitelisted X-properties describe source clocks only. Never
+  // use them to parse a date, override TZID, or reinterpret floating values.
+  if (!endpoint || !property || endpoint.params["TZID"] !== undefined
+    || endpoint.params["VALUE"] === "DATE" || !/^\d{8}T\d{6}Z$/.test(endpoint.value)) return null;
+  if (Object.entries(property.params).some(([key, value]) => key !== "VALUE" || value !== "TEXT")) return null;
+  return canonicalTimeZone(property.value);
+}
+
 function parsePropLine(line: string): { name: string; line: ParsedLine } | null {
   const colonIdx = line.indexOf(":");
   if (colonIdx < 0) return null;
@@ -561,8 +571,12 @@ export function parseEvent(ics: string): IcalEvent | null {
   // A missing override means that the endpoint shares DTSTART's zone.
   // Keep ordinary UTC imports ordinary; only pin UTC on DTSTART when an
   // explicitly different arrival zone needs an unambiguous origin.
-  const startZone = canonicalTimeZone(startTzid) ?? "UTC";
+  const standalone = !allDay && !singleProps["RRULE"]?.value;
+  const sourceStartZone = standalone ? sourceZoneFromUtcEndpoint(dtstart, singleProps[sourceZoneProperties.DTSTART]) : null;
+  const sourceEndZone = standalone ? sourceZoneFromUtcEndpoint(dtend, singleProps[sourceZoneProperties.DTEND]) : null;
+  const startZone = canonicalTimeZone(startTzid) ?? sourceStartZone ?? "UTC";
   const parsedEndZone = canonicalTimeZone(dtend?.params["TZID"])
+    ?? sourceEndZone
     ?? (dtend?.value.endsWith("Z") ? "UTC" : null);
   const endTimezone = !allDay && parsedEndZone && parsedEndZone !== startZone ? parsedEndZone : null;
 
@@ -579,7 +593,7 @@ export function parseEvent(ics: string): IcalEvent | null {
     url: singleProps["URL"]?.value?.trim() ? singleProps["URL"].value.trim() : null,
     recurrenceId,
     // Preserve both endpoint zones without changing the absolute instants.
-    timezone: startTzid ?? (endTimezone ? "UTC" : null),
+    timezone: startTzid ?? sourceStartZone ?? (endTimezone ? "UTC" : null),
     endTimezone,
     createdAt: singleProps["CREATED"] ? parseICalDateValue(singleProps["CREATED"].value, false) : null,
     updatedAt: singleProps["LAST-MODIFIED"] ? parseICalDateValue(singleProps["LAST-MODIFIED"].value, false) : null,
