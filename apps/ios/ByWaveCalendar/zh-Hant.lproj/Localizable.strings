@@ -822,3 +822,5 @@
 "event.timezone.invalidDates" = "結束日期不能早於開始日期。";
 
 "event.timezone.invalidLocalDate" = "所選時區中不存在這個當地日期或時間，請選擇其他日期或時間。";
+
+"event.source.localTimes" = "活動當地時間 · %@";

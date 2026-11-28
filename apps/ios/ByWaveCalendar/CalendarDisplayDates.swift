@@ -1,6 +1,28 @@
 import Foundation
 
 enum CalendarDisplayDates {
+    /// A single-zone appointment can show a second clock. Trips already
+    /// have independently labeled endpoints, and all-day dates float.
+    static func sourceTimeZone(for event: EventDTO, calendarZone: String?, viewerZone: TimeZone) -> TimeZone? {
+        guard !event.allDay else { return nil }
+        let zones = EventEditorDates.endpointTimeZones(start: event.extra?.timezone, end: event.extra?.endTimezone,
+                                                      calendar: calendarZone, device: viewerZone)
+        return zones.start == zones.end && !EventEditorDates.sameTimeZone(zones.start, viewerZone) ? zones.start : nil
+    }
+
+    /// Include dates on both clocks whenever either endpoint changes its
+    /// calendar date between zones (including at month/year boundaries).
+    static func differentLocalDates(start: Date, end: Date, in firstZone: TimeZone, and secondZone: TimeZone) -> Bool {
+        var first = Calendar(identifier: .gregorian)
+        first.timeZone = firstZone
+        var second = first
+        second.timeZone = secondZone
+        let fields: Set<Calendar.Component> = [.era, .year, .month, .day]
+        return [start, end].contains {
+            first.dateComponents(fields, from: $0) != second.dateComponents(fields, from: $0)
+        }
+    }
+
     /// A selected day is a civil date. "Today" continues to follow the clock
     /// when the device crosses midnight by changing its time zone.
     static func selectedDay(_ date: Date, now: Date, calendar: Calendar, from oldZone: TimeZone, to newZone: TimeZone) -> Date {

@@ -103,18 +103,26 @@ struct EventDetailView: View {
                     }
                 } else {
                     LabeledContent("开始") {
-                        Text(absoluteTime(current.startsAt))
+                        Text(viewerTime(current.startsAt))
                     }
                     LabeledContent("结束") {
-                        Text(absoluteTime(current.endsAt))
+                        Text(viewerTime(current.endsAt))
                     }
-                    LabeledContent("显示时区", value: deviceTimeZone.identifier)
-                    if itineraryZones == nil, let sourceZone = current.extra?.timezone, !sourceZone.isEmpty, sourceZone != deviceTimeZone.identifier {
-                        LabeledContent("日程时区", value: sourceZone)
-                    }
+                    LabeledContent("显示时区", value: DateFormatters.zoneLabel(deviceTimeZone, at: current.startsAt))
                     LabeledContent("时长") {
                         Text(durationLabel)
                     }
+                }
+            }
+
+            if let sourceZone = CalendarDisplayDates.sourceTimeZone(for: current, calendarZone: calendar?.timezone, viewerZone: deviceTimeZone) {
+                Section {
+                    sourceTimeRow("开始", date: current.startsAt, zone: sourceZone)
+                        .accessibilityIdentifier("event.source.start")
+                    sourceTimeRow("结束", date: current.endsAt, zone: sourceZone)
+                        .accessibilityIdentifier("event.source.end")
+                } header: {
+                    Text("event.source.localTimes".locFormat(DateFormatters.zoneLabel(sourceZone, at: current.startsAt)))
                 }
             }
 
@@ -368,10 +376,35 @@ struct EventDetailView: View {
         VStack(alignment: .leading, spacing: 3) {
             Text(title).font(.subheadline).foregroundStyle(.secondary)
             Text(absoluteTime(date, in: zone)).font(.body.weight(.medium))
-            Text(DateFormatters.localFormatter("VVV · OOOO", template: false, zone: zone).string(from: date))
+            let offset = DateFormatters.localFormatter("OOOO", template: false, zone: zone).string(from: date)
+            let label = DateFormatters.zoneLabel(zone, at: date)
+            Text(label == offset ? label : "\(label) · \(offset)")
                 .font(.footnote).foregroundStyle(.secondary)
         }
         .accessibilityElement(children: .combine)
+    }
+
+    private func sourceTimeRow(_ title: LocalizedStringKey, date: Date, zone: TimeZone) -> some View {
+        LabeledContent(title) {
+            VStack(alignment: .trailing, spacing: 2) {
+                Text(absoluteTime(date, in: zone))
+                    .fixedSize(horizontal: false, vertical: true)
+                // Resolve each endpoint separately: an event can cross a DST
+                // transition even when its activity has a single time zone.
+                Text(DateFormatters.localFormatter("OOOO", template: false, zone: zone).string(from: date))
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+        }
+        .accessibilityElement(children: .combine)
+    }
+
+    private func viewerTime(_ date: Date) -> String {
+        let formatted = absoluteTime(date)
+        guard deviceTimeZone.secondsFromGMT(for: current.startsAt) != deviceTimeZone.secondsFromGMT(for: current.endsAt) else { return formatted }
+        // A local clock can repeat or jump within one event. Only add offsets
+        // when needed to distinguish those instants in the viewer's zone.
+        let offset = DateFormatters.localFormatter("OOOO", template: false, zone: deviceTimeZone).string(from: date)
+        return "\(formatted) · \(offset)"
     }
 
     private var durationLabel: String {

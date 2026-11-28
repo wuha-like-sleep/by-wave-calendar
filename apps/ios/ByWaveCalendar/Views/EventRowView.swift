@@ -13,6 +13,8 @@ struct EventRowView: View {
     // a per-row date would be noise. SearchView sets it true: results span
     // arbitrary dates, so "14:00–15:00" alone is ambiguous there.
     var showsDate: Bool = false
+    // Search summaries only carry a display hint; their editable metadata is unloaded.
+    var searchSourceTimezone: String? = nil
     // Optional callbacks for the long-press context menu. When nil, the
     // menu items don't render (used by SearchView where these actions
     // don't make sense without a parent refresh hook).
@@ -94,9 +96,14 @@ struct EventRowView: View {
                             .foregroundStyle(.orange)
                     }
                 }
-                HStack(spacing: 6) {
-                    Image(systemName: "clock").font(.caption2)
-                    Text(timeLabel).font(.caption).foregroundStyle(.secondary)
+                if let source = CalendarDisplayDates.sourceTimeZone(for: event, calendarZone: searchSourceTimezone ?? calendar?.timezone, viewerZone: displayZone) {
+                    let datesNeeded = showsDate || CalendarDisplayDates.differentLocalDates(start: event.startsAt, end: event.endsAt, in: displayZone, and: source)
+                    clockLine(zone: displayZone, datesNeeded: datesNeeded, icon: "clock")
+                    clockLine(zone: source, datesNeeded: datesNeeded, icon: "globe")
+                        .foregroundStyle(.secondary)
+                } else {
+                    Label(timeLabel, systemImage: "clock")
+                        .font(.caption).foregroundStyle(.secondary)
                 }
                 if let location = event.location, !location.isEmpty {
                     HStack(spacing: 6) {
@@ -129,19 +136,16 @@ struct EventRowView: View {
             let last = f.string(from: AllDayDates.lastInclusiveUTCDay(of: event))
             return start + " – " + last + " · " + "全天".loc
         }
-        var displayCalendar = Calendar.current
-        displayCalendar.timeZone = displayZone
-        let sameDay = displayCalendar.isDate(event.startsAt, inSameDayAs: event.endsAt)
-        // In search (showsDate) a same-day event still needs its date —
-        // the result could be any day. dateTimeShort already carries the
-        // M/D, so we just prepend the start date and keep the end as a
-        // plain time when it's the same day.
-        if showsDate, sameDay {
-            let day = DateFormatters.localFormatter("MMMd", template: true, zone: displayZone).string(from: event.startsAt)
-            let t = DateFormatters.localFormatter("HH:mm", template: false, zone: displayZone)
-            return day + " " + t.string(from: event.startsAt) + " – " + t.string(from: event.endsAt)
-        }
-        let f = DateFormatters.localFormatter(sameDay ? "HH:mm" : "MdHm", template: !sameDay, zone: displayZone)
-        return f.string(from: event.startsAt) + " – " + f.string(from: event.endsAt)
+        return DateFormatters.timedRange(start: event.startsAt, end: event.endsAt, zone: displayZone,
+                                        includeDate: showsDate, includeYear: showsDate)
+    }
+
+    private func clockLine(zone: TimeZone, datesNeeded: Bool, icon: String) -> some View {
+        let city = DateFormatters.zoneLabel(zone, at: event.startsAt)
+        let range = DateFormatters.timedRange(start: event.startsAt, end: event.endsAt, zone: zone,
+                                            includeDate: datesNeeded, includeYear: showsDate)
+        return Label(city + " · " + range, systemImage: icon)
+            .font(.caption)
+            .fixedSize(horizontal: false, vertical: true)
     }
 }

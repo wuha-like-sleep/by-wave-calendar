@@ -821,3 +821,5 @@
 "event.timezone.invalidDates" = "終了日は開始日以降にしてください。";
 
 "event.timezone.invalidLocalDate" = "選択したタイムゾーンには、この現地の日付または時刻が存在しません。別の日付または時刻を選択してください。";
+
+"event.source.localTimes" = "予定の現地時刻 · %@";

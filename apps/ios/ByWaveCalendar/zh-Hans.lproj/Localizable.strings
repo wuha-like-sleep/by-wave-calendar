@@ -827,3 +827,5 @@
 "event.timezone.invalidDates" = "结束日期不能早于开始日期。";
 
 "event.timezone.invalidLocalDate" = "所选时区中不存在这个当地日期或时间，请选择其他日期或时间。";
+
+"event.source.localTimes" = "活动当地时间 · %@";

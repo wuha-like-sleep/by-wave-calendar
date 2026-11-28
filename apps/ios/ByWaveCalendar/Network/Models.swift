@@ -405,7 +405,20 @@ enum EventEditorDates {
             return TimeZone(identifier: identifier)
         }
         let origin = zone(start) ?? zone(calendar) ?? device
-        return (origin, zone(end) ?? origin)
+        guard let destination = zone(end), !sameTimeZone(origin, destination) else { return (origin, origin) }
+        return (origin, destination)
+    }
+
+    /// Foundation retains IANA aliases (e.g. Australia/Victoria). Their
+    /// Unicode timezone identifiers agree even when Swift's equality does not.
+    static func sameTimeZone(_ first: TimeZone, _ second: TimeZone) -> Bool {
+        if first == second { return true }
+        func key(_ zone: TimeZone) -> String {
+            let tag = Locale(identifier: "und@timezone=" + zone.identifier).identifier(.bcp47)
+            if tag == "und-u-tz-gmt" { return "und-u-tz-utc" }
+            return tag.hasPrefix("und-u-tz-") ? tag : zone.identifier
+        }
+        return key(first) == key(second)
     }
 
     static func isChronological(start: Date, end: Date) -> Bool {

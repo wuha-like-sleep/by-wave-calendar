@@ -807,7 +807,7 @@ struct SyncSettingsPage: View {
             let formatter = ISO8601DateFormatter()
             let response: EventsResponse = try await APIClient(state: state).get("/events?from=\(formatter.string(from: from))&to=\(formatter.string(from: to))")
             guard state.activeProfileId == profileID, !Task.isCancelled else { return }
-            let succeeded = await EventKitMirror.shared.mirror(events: response.events, windowStart: from, windowEnd: to, selectedCalendarIDs: mirrorSelection)
+            let succeeded = await EventKitMirror.shared.mirror(events: response.events, windowStart: from, windowEnd: to, selectedCalendarIDs: mirrorSelection, calendars: response.calendars)
             mirrorMessage = succeeded ? "calendarSync.lastSync".loc + " · " + Date().formatted(date: .omitted, time: .shortened) : "calendarSync.error.unavailable".loc
         } catch { if !Task.isCancelled { mirrorMessage = "calendarSync.error.unavailable".loc } }
     }

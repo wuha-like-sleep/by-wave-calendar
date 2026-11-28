@@ -821,3 +821,5 @@
 "event.timezone.invalidDates" = "종료일은 시작일보다 빠를 수 없습니다.";
 
 "event.timezone.invalidLocalDate" = "선택한 시간대에 이 현지 날짜나 시간이 존재하지 않습니다. 다른 날짜나 시간을 선택하세요.";
+
+"event.source.localTimes" = "일정 현지 시간 · %@";

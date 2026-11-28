@@ -76,6 +76,30 @@ enum DateFormatters {
         return formatter
     }
 
+    static func zoneLabel(_ zone: TimeZone, at date: Date) -> String {
+        let city = localFormatter("VVV", template: false, zone: zone).string(from: date)
+        // CLDR returns a localized “unknown city” for fixed-offset zones.
+        let unknownCity = localFormatter("VVV", template: false, zone: TimeZone(secondsFromGMT: 0)!).string(from: date)
+        return city == unknownCity ? localFormatter("OOOO", template: false, zone: zone).string(from: date) : city
+    }
+
+    /// A date shared by both endpoints is printed once. On a clock change,
+    /// give each endpoint its offset so a repeated hour is unambiguous.
+    static func timedRange(start: Date, end: Date, zone: TimeZone, includeDate: Bool, includeYear: Bool) -> String {
+        var calendar = Calendar.current
+        calendar.timeZone = zone
+        let sameDay = calendar.isDate(start, inSameDayAs: end)
+        let yearNeeded = includeYear || !calendar.isDate(start, equalTo: end, toGranularity: .year)
+        let date = localFormatter(yearNeeded ? "yMMMd" : "MMMd", template: true, zone: zone)
+        let clocksChange = zone.secondsFromGMT(for: start) != zone.secondsFromGMT(for: end)
+        let time = localFormatter(clocksChange ? "HH:mm OOOO" : "HH:mm", template: false, zone: zone)
+        let startClock = time.string(from: start)
+        let endClock = time.string(from: end)
+        let startLabel = includeDate || !sameDay ? date.string(from: start) + " " + startClock : startClock
+        let endLabel = sameDay ? endClock : date.string(from: end) + " " + endClock
+        return startLabel + " – " + endLabel
+    }
+
     /// Fixed pattern under the app's current locale (honors the in-app
     /// AppleLanguages override, which a language change relaunch applies).
     private static func makeFixed(_ format: String) -> DateFormatter {

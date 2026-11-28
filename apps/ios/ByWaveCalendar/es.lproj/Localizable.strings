@@ -821,3 +821,5 @@
 "event.timezone.invalidDates" = "La fecha de fin no puede ser anterior a la de inicio.";
 
 "event.timezone.invalidLocalDate" = "Esta fecha u hora local no existe en la zona horaria seleccionada. Elige otra fecha u hora.";
+
+"event.source.localTimes" = "Hora local del evento · %@";

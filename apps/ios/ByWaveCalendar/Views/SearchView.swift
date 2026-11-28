@@ -23,6 +23,7 @@ private struct SearchResult: Decodable, Identifiable, Hashable {
     let calendarId: String
     let calendarName: String?
     let calendarColor: String?
+    let sourceTimezone: String?
     let summary: String
     let location: String?
     let startsAt: Date
@@ -78,7 +79,8 @@ struct SearchView: View {
                         // search spans arbitrary days, unlike Day/Week.
                         // rrule / allDay 现在服务端会回，所以重复标记和全天
                         // 的样式在搜索结果里也是对的（旧服务端不回，退回原样）。
-                        EventRowView(event: r.toEventDTO(), calendar: r.calendarMeta(), showsDate: true)
+                        EventRowView(event: r.toEventDTO(), calendar: r.calendarMeta(), showsDate: true,
+                                     searchSourceTimezone: r.sourceTimezone)
                     }
                     .buttonStyle(.plain)
                 }
@@ -98,7 +100,7 @@ struct SearchView: View {
                 NavigationStack {
                     EventDetailView(
                         event: hydrated[r.id] ?? r.toEventDTO(),
-                        calendar: calendars.first { $0.id == r.calendarId } ?? r.calendarMeta(),
+                        calendar: hydrated[r.id] == nil ? r.calendarMeta() : (calendars.first { $0.id == r.calendarId } ?? r.calendarMeta()),
                         allCalendars: calendars,
                         onChanged: {
                             // Search result list doesn't auto-refresh after

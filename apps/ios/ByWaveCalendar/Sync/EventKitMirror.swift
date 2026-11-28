@@ -107,7 +107,7 @@ final class EventKitMirror {
     // (`from`/`to`) is used to scope deletions: don't touch local events
     // outside this range, because the server didn't tell us about them.
     @discardableResult
-    func mirror(events allEvents: [EventDTO], windowStart: Date, windowEnd: Date, selectedCalendarIDs: Set<String>? = nil) async -> Bool {
+    func mirror(events allEvents: [EventDTO], windowStart: Date, windowEnd: Date, selectedCalendarIDs: Set<String>? = nil, calendars: [CalendarMeta] = []) async -> Bool {
         guard isEnabled, permission == .granted else { return false }
         guard let calendar = findOrCreateCalendar() else { return false }
         let events = allEvents.filter { selectedCalendarIDs == nil || selectedCalendarIDs!.contains($0.calendarId) }
@@ -125,12 +125,12 @@ final class EventKitMirror {
             sources[key] = ev.calendarId
             if let existingId = mapping[key],
                let existing = store.event(withIdentifier: existingId) {
-                apply(server: ev, to: existing)
+                Self.apply(server: ev, calendarZone: calendars.first { $0.id == ev.calendarId }?.timezone, to: existing)
                 do { try store.save(existing, span: .thisEvent, commit: false); savedEvents[key] = existing } catch { failed = true }
             } else {
                 let new = EKEvent(eventStore: store)
                 new.calendar = calendar
-                apply(server: ev, to: new)
+                Self.apply(server: ev, calendarZone: calendars.first { $0.id == ev.calendarId }?.timezone, to: new)
                 do {
                     try store.save(new, span: .thisEvent, commit: false)
                     savedEvents[key] = new
@@ -209,22 +209,28 @@ final class EventKitMirror {
         return e.id
     }
 
-    private func apply(server: EventDTO, to ek: EKEvent) {
+    static func apply(server: EventDTO, calendarZone: String? = nil, to ek: EKEvent) {
         ek.title = server.summary
         ek.notes = server.description
         ek.location = server.location
-        ek.startDate = server.startsAt
-        ek.endDate = server.endsAt
+        // EventKit all-day entries are floating civil dates in the device
+        // calendar, unlike Android's UTC midnight provider contract. Timed
+        // entries must instead have an explicit source zone and exact Dates.
+        ek.timeZone = server.allDay ? nil : EventEditorDates.endpointTimeZones(
+            start: server.extra?.timezone, end: nil, calendar: calendarZone,
+            device: TimeZone(secondsFromGMT: 0)!
+        ).start
         ek.isAllDay = server.allDay
-        // All-day dates arrive as UTC midnights (the app's AllDayDates
-        // day math is UTC-based). EventKit reads an all-day event's day
-        // in the EVENT's time zone, falling back to the device zone —
-        // in UTC− zones an unpinned all-day event lands on the previous
-        // day. Pin all-day events to GMT so the day is the same
-        // everywhere; timed events keep absolute dates (zone-free).
-        // Set both ways: an event edited from all-day to timed must not
-        // keep a stale GMT pin from an earlier mirror.
-        ek.timeZone = server.allDay ? TimeZone(secondsFromGMT: 0) : nil
+        // Setting allDay/timeZone can rebase dates inside EventKit. Assign
+        // the final dates last, including when reusing an EKEvent.
+        if server.allDay {
+            let range = EventEditorDates.allDayEditorRange(start: server.startsAt, end: server.endsAt)
+            ek.startDate = range.start
+            ek.endDate = range.end
+        } else {
+            ek.startDate = server.startsAt
+            ek.endDate = server.endsAt
+        }
         // We don't mirror RRULE — server already expanded it, and EKEvent
         // recurrence rules are a whole separate API surface. Each
         // occurrence is its own EKEvent in our mirror.

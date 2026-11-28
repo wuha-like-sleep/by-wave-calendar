@@ -1461,7 +1461,7 @@ struct CalendarView: View {
             // Fire EventKit mirror (no-op if disabled / no permission).
             Task {
                 guard generation == loadGeneration, state.isSignedIn, state.activeProfileId == loadingProfileId, let profileID = loadingProfileId else { return }
-                await EventKitMirror.shared.mirror(events: displayEvents, windowStart: from, windowEnd: to, selectedCalendarIDs: EventKitMirror.shared.selectedCalendars(profileID: profileID))
+                await EventKitMirror.shared.mirror(events: displayEvents, windowStart: from, windowEnd: to, selectedCalendarIDs: EventKitMirror.shared.selectedCalendars(profileID: profileID), calendars: calendars)
             }
             // Re-schedule local notifications. No-op when feature disabled
             // or permission denied. Always uses the full event set so
