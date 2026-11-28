@@ -39,6 +39,8 @@ export type IcalEvent = {
   // above are always UTC instants; this just remembers which wall-clock
   // they were created in.
   timezone?: string | null;
+  // Optional DTEND zone for journeys; recurrence remains anchored to DTSTART.
+  endTimezone?: string | null;
   createdAt?: Date | null;
   updatedAt?: Date | null;
   transp?: string | null;
@@ -186,6 +188,7 @@ export function serializeEvent(event: IcalEvent): string {
   // 认不出来的时区名不带 TZID 写出去：以前会写成「TZID=认不出的名字:按 UTC 读出来的
   // 墙上时间」，手机不认识这个 TZID 就当成本机时间，整个事件挪了一个时差。
   const zone = event.allDay ? null : canonicalTimeZone(event.timezone);
+  const endZone = event.allDay ? null : canonicalTimeZone(event.endTimezone) ?? zone;
   const lines: string[] = [
     "BEGIN:VEVENT",
     `UID:${event.uid}`,
@@ -206,12 +209,14 @@ export function serializeEvent(event: IcalEvent): string {
     // 写成 UTC 的话，墨尔本周一 9:30（= UTC 周日 22:30）的「每周一」在手机上落到周二，
     // 夏令时一切换整体挪一小时 —— 和服务端（按 event_zone.ts 的时区展开）对不上。
     const wall = formatWallClockInZone(event.startsAt, zone);
-    const wallEnd = formatWallClockInZone(event.endsAt, zone);
     lines.push(`DTSTART;TZID=${zone}:${wall}`);
-    lines.push(`DTEND;TZID=${zone}:${wallEnd}`);
   } else {
     lines.push(`DTSTART:${formatDateTime(event.startsAt)}`);
-    lines.push(`DTEND:${formatDateTime(event.endsAt)}`);
+  }
+  if (!event.allDay) {
+    lines.push(endZone
+      ? `DTEND;TZID=${endZone}:${formatWallClockInZone(event.endsAt, endZone)}`
+      : `DTEND:${formatDateTime(event.endsAt)}`);
   }
   lines.push(`SUMMARY:${escapeText(event.summary)}`);
   if (event.location) lines.push(`LOCATION:${escapeText(event.location)}`);
@@ -553,6 +558,13 @@ export function parseEvent(ics: string): IcalEvent | null {
   // 去重和 8 条上限也在这里一并做掉（同 trigger 两条会在同一分钟响两次，
   // 而幂等键 (event_id, trigger, instance_start) 因为原文不同挡不住）。
   const cleanAlarms = normalizeAlarms(alarms);
+  // A missing override means that the endpoint shares DTSTART's zone.
+  // Keep ordinary UTC imports ordinary; only pin UTC on DTSTART when an
+  // explicitly different arrival zone needs an unambiguous origin.
+  const startZone = canonicalTimeZone(startTzid) ?? "UTC";
+  const parsedEndZone = canonicalTimeZone(dtend?.params["TZID"])
+    ?? (dtend?.value.endsWith("Z") ? "UTC" : null);
+  const endTimezone = !allDay && parsedEndZone && parsedEndZone !== startZone ? parsedEndZone : null;
 
   return {
     uid: uid.trim(),
@@ -566,10 +578,9 @@ export function parseEvent(ics: string): IcalEvent | null {
     exdates: exdates.length ? exdates : null,
     url: singleProps["URL"]?.value?.trim() ? singleProps["URL"].value.trim() : null,
     recurrenceId,
-    // Capture the TZID parameter from DTSTART for round-trip preservation.
-    // We don't try to merge start vs end TZID — an event spanning timezones
-    // is rare and CalDAV clients all use DTSTART's TZID for display anyway.
-    timezone: startTzid ?? null,
+    // Preserve both endpoint zones without changing the absolute instants.
+    timezone: startTzid ?? (endTimezone ? "UTC" : null),
+    endTimezone,
     createdAt: singleProps["CREATED"] ? parseICalDateValue(singleProps["CREATED"].value, false) : null,
     updatedAt: singleProps["LAST-MODIFIED"] ? parseICalDateValue(singleProps["LAST-MODIFIED"].value, false) : null,
     transp: singleProps["TRANSP"]?.value?.toUpperCase() ?? null,

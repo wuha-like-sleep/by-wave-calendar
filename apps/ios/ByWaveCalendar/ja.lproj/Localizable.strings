@@ -801,3 +801,23 @@
 "这张清单的条目已达上限。" = "このリストのアイテム数が上限に達しています。";
 "这个事件已经不存在了，无法关联。" = "その予定は既に存在しないため、紐づけできませんでした。";
 "切换侧边栏" = "サイドバーを切り替える";
+
+"calendar.selectDate" = "日付を選択";
+
+"event.trip.localTimes" = "旅程の現地時刻";
+"event.trip.departure" = "出発";
+"event.trip.arrival" = "到着";
+"event.trip.viewerTime" = "自分の現地時刻";
+
+// Event endpoint time zones
+"event.timezone.start" = "開始時刻のタイムゾーン";
+"event.timezone.end" = "終了時刻のタイムゾーン";
+"event.timezone.search" = "都市またはタイムゾーンを検索";
+"event.timezone.keepsInstant" = "タイムゾーンを変えても実際の時刻は変わりません。予定を変更するには、現地の日付と時刻を編集してください。";
+"event.timezone.invalidOrder" = "終了を開始より前には設定できません。両方の日付とタイムゾーンを確認してください。";
+"event.timezone.elapsed" = "実際の所要時間";
+"event.timezone.repeatedTime" = "重複する現地時刻";
+
+"event.timezone.invalidDates" = "終了日は開始日以降にしてください。";
+
+"event.timezone.invalidLocalDate" = "選択したタイムゾーンには、この現地の日付または時刻が存在しません。別の日付または時刻を選択してください。";

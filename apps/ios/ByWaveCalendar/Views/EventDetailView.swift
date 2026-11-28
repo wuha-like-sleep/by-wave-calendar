@@ -89,8 +89,14 @@ struct EventDetailView: View {
                 }
             }
 
-            // Time
-            Section("时间") {
+            if let zones = itineraryZones {
+                Section("event.trip.localTimes") {
+                    endpointRow("event.trip.departure", date: current.startsAt, zone: zones.start)
+                    endpointRow("event.trip.arrival", date: current.endsAt, zone: zones.end)
+                }
+            }
+
+            Section(itineraryZones == nil ? LocalizedStringKey("时间") : LocalizedStringKey("event.trip.viewerTime")) {
                 if current.allDay {
                     LabeledContent("全天") {
                         Text(allDayLabel)
@@ -103,7 +109,7 @@ struct EventDetailView: View {
                         Text(absoluteTime(current.endsAt))
                     }
                     LabeledContent("显示时区", value: deviceTimeZone.identifier)
-                    if let sourceZone = current.extra?.timezone, !sourceZone.isEmpty, sourceZone != deviceTimeZone.identifier {
+                    if itineraryZones == nil, let sourceZone = current.extra?.timezone, !sourceZone.isEmpty, sourceZone != deviceTimeZone.identifier {
                         LabeledContent("日程时区", value: sourceZone)
                     }
                     LabeledContent("时长") {
@@ -256,6 +262,7 @@ struct EventDetailView: View {
                 .disabled(deleting)
             }
         }
+        .onChange(of: event) { _, refreshed in current = refreshed }
         .onReceive(NotificationCenter.default.publisher(for: .NSSystemTimeZoneDidChange)) { _ in
             deviceTimeZone = DateFormatters.refreshDeviceTimeZone()
         }
@@ -349,11 +356,22 @@ struct EventDetailView: View {
         return f.string(from: current.startsAt) + " — " + f.string(from: AllDayDates.lastInclusiveUTCDay(of: current))
     }
 
-    private func absoluteTime(_ d: Date) -> String {
-        let f = DateFormatter(); f.locale = Locale.current
-        f.timeZone = deviceTimeZone
-        f.setLocalizedDateFormatFromTemplate("yMMMdHm")  // 24h time, localized field order
-        return f.string(from: d)
+    private var itineraryZones: (start: TimeZone, end: TimeZone)? {
+        AllDayDates.itineraryZones(current, calendarZone: calendar?.timezone, deviceZone: deviceTimeZone)
+    }
+
+    private func absoluteTime(_ date: Date, in zone: TimeZone? = nil) -> String {
+        DateFormatters.localFormatter("yMMMdHm", template: true, zone: zone ?? deviceTimeZone).string(from: date)
+    }
+
+    private func endpointRow(_ title: LocalizedStringKey, date: Date, zone: TimeZone) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(title).font(.subheadline).foregroundStyle(.secondary)
+            Text(absoluteTime(date, in: zone)).font(.body.weight(.medium))
+            Text(DateFormatters.localFormatter("VVV · OOOO", template: false, zone: zone).string(from: date))
+                .font(.footnote).foregroundStyle(.secondary)
+        }
+        .accessibilityElement(children: .combine)
     }
 
     private var durationLabel: String {

@@ -52,17 +52,20 @@ enum AllDayDates {
         return ev.startsAt < end && ev.endsAt > start
     }
 
-    /// 月视图的格子里挂不挂这个事件的条。
-    /// 全天事件按日期占格（多天的全天事件挂它占的每一格）；定时事件
-    /// 只挂开始日那一格 —— 跨午夜的定时事件（25 号 22:00 → 26 号
-    /// 04:00）若按 occupies 在 26 号再挂一条，看起来就像重复建了
-    /// 两个事件。与 Android / 桌面端 MonthView 的既有口径一致
-    /// （timed events keep their start-day chip）。
-    /// 注意这只是月视图格子的归属：日 / 周视图和点开某一天的日视图
-    /// 仍然走 occupies 按实际时段画，26 号凌晨那段照常显示。
-    static func showsInMonthCell(_ ev: EventDTO, localDay day: Date, calendar: Calendar = .current) -> Bool {
+    /// Both ends of a timed trip have explicit local-time context.
+    static func itineraryZones(_ event: EventDTO, calendarZone: String? = nil, deviceZone: TimeZone = .current) -> (start: TimeZone, end: TimeZone)? {
+        guard !event.allDay, let end = event.extra?.endTimezone else { return nil }
+        let zones = EventEditorDates.endpointTimeZones(start: event.extra?.timezone, end: end, calendar: calendarZone, device: deviceZone)
+        return zones.start == zones.end ? nil : zones
+    }
+
+    /// Show an ongoing itinerary on each occupied viewer day. Ordinary timed
+    /// events retain a single month chip on their start day.
+    static func showsInMonthCell(_ ev: EventDTO, localDay day: Date, calendar: Calendar = .current, calendarZone: String? = nil) -> Bool {
         if ev.allDay { return occupies(ev, localDay: day, calendar: calendar) }
-        return calendar.isDate(ev.startsAt, inSameDayAs: day)
+        if calendar.isDate(ev.startsAt, inSameDayAs: day) { return true }
+        guard ev.extra?.endTimezone != nil, occupies(ev, localDay: day, calendar: calendar) else { return false }
+        return itineraryZones(ev, calendarZone: calendarZone, deviceZone: calendar.timeZone) != nil
     }
 
     /// 事件的第一天，用本地日历的 Date 表示（按天分桶时当键用）。
@@ -80,7 +83,7 @@ enum AllDayDates {
     /// 一个「9 月 21 日一天」的事件 endsAt 是 9 月 22 日 —— 直接拿去显示
     /// 就会告诉用户这是两天的事。
     static func lastInclusiveUTCDay(of ev: EventDTO) -> Date {
-        utcCalendar.date(byAdding: .day, value: -1, to: ev.endsAt) ?? ev.startsAt
+        EventEditorDates.lastInclusiveAllDay(end: ev.endsAt, start: ev.startsAt)
     }
 
     /// 是不是只占一天（全天事件专用）。
@@ -115,5 +118,44 @@ struct YearEventSummary {
         }
         busyDays = occupied
         eventCountByMonth = counts
+    }
+}
+
+extension EventEditorDates {
+    /// Move civil date components between picker calendars only when the user
+    /// explicitly switches all-day mode. Never use this to change a timed event's zone.
+    static func civilDate(_ day: Date, calendar: Calendar, zone: TimeZone,
+                          hour: Int, minute: Int = 0, second: Int = 0) -> Date? {
+        var target = Calendar(identifier: .gregorian)
+        target.timeZone = zone
+        var parts = calendar.dateComponents([.year, .month, .day], from: day)
+        parts.hour = hour
+        parts.minute = minute
+        parts.second = second
+        guard let date = target.date(from: parts) else { return nil }
+        let actual = target.dateComponents([.year, .month, .day, .hour, .minute, .second], from: date)
+        // Calendar.date(from:) may normalize a nonexistent DST clock or civil day.
+        // Keep that visible as an error instead of silently moving the user's date.
+        guard actual.year == parts.year, actual.month == parts.month, actual.day == parts.day,
+              actual.hour == hour, actual.minute == minute, actual.second == second else { return nil }
+        return date
+    }
+
+    static func allDayFromTimed(start: Date, end: Date, startZone: TimeZone, endZone: TimeZone,
+                               pickerCalendar: Calendar) -> (start: Date, end: Date)? {
+        var origin = Calendar(identifier: .gregorian)
+        origin.timeZone = startZone
+        var destination = Calendar(identifier: .gregorian)
+        destination.timeZone = endZone
+        guard let first = civilDate(start, calendar: origin, zone: pickerCalendar.timeZone, hour: 0),
+              let last = civilDate(end, calendar: destination, zone: pickerCalendar.timeZone, hour: 23, minute: 59, second: 59) else { return nil }
+        return (first, last)
+    }
+
+    static func timedFromAllDay(start: Date, end: Date, pickerCalendar: Calendar,
+                               startZone: TimeZone, endZone: TimeZone) -> (start: Date, end: Date)? {
+        guard let first = civilDate(start, calendar: pickerCalendar, zone: startZone, hour: 9),
+              let last = civilDate(end, calendar: pickerCalendar, zone: endZone, hour: 10) else { return nil }
+        return (first, last)
     }
 }

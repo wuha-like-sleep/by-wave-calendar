@@ -20,12 +20,14 @@ struct YearView: View {
     @ScaledMetric(relativeTo: .subheadline) private var titleHeight: CGFloat = 28
     @ScaledMetric(relativeTo: .caption2) private var countHeight: CGFloat = 18
 
-    private let calendar: Calendar = {
+    @Environment(\.timeZone) private var displayTimeZone
+    private var calendar: Calendar {
         var c = Calendar(identifier: .gregorian)
+        c.timeZone = displayTimeZone
         c.firstWeekday = 2
         c.locale = Locale.current  // symbols follow app language (was zh_CN)
         return c
-    }()
+    }
 
     private var year: Int { calendar.component(.year, from: yearAnchor) }
 

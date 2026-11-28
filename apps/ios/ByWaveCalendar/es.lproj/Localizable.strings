@@ -801,3 +801,23 @@
 "这张清单的条目已达上限。" = "Esta lista ha alcanzado el número máximo de artículos.";
 "这个事件已经不存在了，无法关联。" = "Ese evento ya no existe, así que no se pudo vincular la lista.";
 "切换侧边栏" = "Mostrar u ocultar la barra lateral";
+
+"calendar.selectDate" = "Elegir fecha";
+
+"event.trip.localTimes" = "Horas locales del viaje";
+"event.trip.departure" = "Salida";
+"event.trip.arrival" = "Llegada";
+"event.trip.viewerTime" = "Mi hora local";
+
+// Event endpoint time zones
+"event.timezone.start" = "Zona horaria de inicio";
+"event.timezone.end" = "Zona horaria de fin";
+"event.timezone.search" = "Buscar ciudad o zona horaria";
+"event.timezone.keepsInstant" = "Cambiar la zona horaria mantiene el mismo instante. Edita la fecha y hora locales para mover el evento.";
+"event.timezone.invalidOrder" = "El fin no puede ser anterior al inicio. Revisa ambas fechas y zonas horarias.";
+"event.timezone.elapsed" = "Duración real";
+"event.timezone.repeatedTime" = "Hora local repetida";
+
+"event.timezone.invalidDates" = "La fecha de fin no puede ser anterior a la de inicio.";
+
+"event.timezone.invalidLocalDate" = "Esta fecha u hora local no existe en la zona horaria seleccionada. Elige otra fecha u hora.";

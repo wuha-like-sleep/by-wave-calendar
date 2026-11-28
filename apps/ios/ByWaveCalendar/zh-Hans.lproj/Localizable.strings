@@ -807,3 +807,23 @@
 "这张清单的条目已达上限。" = "这张清单的条目已达上限。";
 "这个事件已经不存在了，无法关联。" = "这个事件已经不存在了，无法关联。";
 "切换侧边栏" = "切换侧边栏";
+
+"calendar.selectDate" = "选择日期";
+
+"event.trip.localTimes" = "行程当地时间";
+"event.trip.departure" = "出发";
+"event.trip.arrival" = "抵达";
+"event.trip.viewerTime" = "我的本地时间";
+
+// Event endpoint time zones
+"event.timezone.start" = "开始时区";
+"event.timezone.end" = "结束时区";
+"event.timezone.search" = "搜索城市或时区";
+"event.timezone.keepsInstant" = "切换时区只改变显示；如需调整行程，请修改当地日期和时间。";
+"event.timezone.invalidOrder" = "结束时间不能早于开始时间，请检查两地的日期和时区。";
+"event.timezone.elapsed" = "实际时长";
+"event.timezone.repeatedTime" = "重复的当地时间";
+
+"event.timezone.invalidDates" = "结束日期不能早于开始日期。";
+
+"event.timezone.invalidLocalDate" = "所选时区中不存在这个当地日期或时间，请选择其他日期或时间。";

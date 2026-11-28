@@ -35,12 +35,19 @@ struct WeekView: View {
     var showsDayHeader: Bool = true
 
     @EnvironmentObject var state: AppState
+    @Environment(\.timeZone) private var displayTimeZone
+
+    private var displayCalendar: Calendar {
+        var calendar = Calendar.current
+        calendar.timeZone = displayTimeZone
+        return calendar
+    }
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     @State private var detailFor: EventDTO?
     @State private var createSeed: (calendarId: String, start: Date)?
-    @State private var dayListDate: Date?
+    @State private var dayListDate: CalendarDaySelection?
     // Drag-to-move state. Set when a long-press completes on an event;
     // updated as the finger moves; consumed (commit/cancel) on release.
     @State private var dragState: DragState?
@@ -68,7 +75,7 @@ struct WeekView: View {
     }
 
     private var dayStarts: [Date] {
-        let cal = Calendar.current
+        let cal = displayCalendar
         return (0..<dayCount).compactMap { cal.date(byAdding: .day, value: $0, to: weekStart) }
     }
 
@@ -90,6 +97,7 @@ struct WeekView: View {
                 .onChange(of: geo.size) { _, _ in cancelDragForLayoutChange() }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .onChange(of: displayTimeZone) { _, _ in cancelDragForLayoutChange() }
         .onChange(of: weekStart) { _, _ in cancelDragForLayoutChange() }
         .onChange(of: dayCount) { _, _ in cancelDragForLayoutChange() }
         .onChange(of: eventGestureActive) { _, active in
@@ -113,14 +121,12 @@ struct WeekView: View {
                 }
             }
         }
-        .sheet(item: Binding(
-            get: { dayListDate.map { DayListItem(date: $0) } },
-            set: { if $0 == nil { dayListDate = nil } },
-        )) { item in
+        .sheet(item: $dayListDate) { selection in
+            let day = selection.date(in: displayCalendar, fallback: weekStart)
             NavigationStack {
-                DayView(anchor: item.date, events: eventsForDay(item.date), calendars: calendars,
+                DayView(anchor: day, events: eventsForDay(day), calendars: calendars,
                         onEventChanged: onEventChanged)
-                    .navigationTitle(item.date.formatted(date: .abbreviated, time: .omitted))
+                    .navigationTitle(day.formatted(date: .abbreviated, time: .omitted))
                     .navigationBarTitleDisplayMode(.inline)
                     .toolbar {
                         ToolbarItem(placement: .topBarTrailing) {
@@ -209,7 +215,7 @@ struct WeekView: View {
                 .onAppear {
                     // Land somewhere useful: an hour before current time
                     // when today is in this week; otherwise 8 AM.
-                    let cal = Calendar.current
+                    let cal = displayCalendar
                     let now = Date()
                     let hour = dayStarts.contains(where: { cal.isDateInToday($0) })
                         ? max(0, cal.component(.hour, from: now) - 1)
@@ -236,8 +242,8 @@ struct WeekView: View {
             // Time gutter spacer
             Color.clear.frame(width: timeGutterWidth)
             ForEach(dayStarts, id: \.self) { day in
-                Button { dayListDate = day } label: {
-                    DayHeader(day: day)
+                Button { dayListDate = CalendarDaySelection(day, calendar: displayCalendar) } label: {
+                    DayHeader(day: day, calendar: displayCalendar)
                         .frame(width: columnWidth)
                         .frame(minHeight: 44)
                         .contentShape(Rectangle())
@@ -278,7 +284,7 @@ struct WeekView: View {
                         allDayPill(ev: ev)
                     }
                     if rows.count > visibleCount {
-                        Button { dayListDate = day } label: {
+                        Button { dayListDate = CalendarDaySelection(day, calendar: displayCalendar) } label: {
                             Text("+\(rows.count - visibleCount)")
                                 .font(.caption.weight(.medium))
                                 .frame(maxWidth: .infinity, minHeight: 44)
@@ -379,7 +385,7 @@ struct WeekView: View {
     private var eventLayer: some View {
         GeometryReader { geo in
             let columnWidth = gridColumnWidth(geo.size.width)
-            let cal = Calendar.current
+            let cal = displayCalendar
             ZStack(alignment: .topLeading) {
                 // Tap-to-create background — one transparent rect per
                 // (day, hour) cell. Stacked behind the event rectangles
@@ -464,7 +470,7 @@ struct WeekView: View {
                 Spacer(minLength: 0)
             }
             .padding(.horizontal, 4).padding(.vertical, 3)
-            .frame(width: p.width, height: max(p.height + resizeDy, 18), alignment: .topLeading)
+            .frame(width: p.width, height: max(p.height + resizeDy, min(18, p.height)), alignment: .topLeading)
             .background(color.opacity(bgOpacity), in: shape)
             // The title/location are fixed-size fonts inside a
             // duration-sized frame; without clipping, a two-line title
@@ -472,20 +478,21 @@ struct WeekView: View {
             .clipShape(shape)
             .contentShape(Rectangle())
             .gesture(dragGesture(for: p))
-            // Resize handle — bottom 6pt strip, slightly darker. Gesture
-            // attached separately so we can detect "is the touch on the
-            // handle" by Y position in onChanged.
-            Rectangle()
-                .fill(Color.white.opacity(0.0001))  // hittable but invisible
-                .frame(height: 12)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 1.5)
-                        .fill(textColor.opacity(0.8))
-                        .frame(width: 16, height: 3)
-                        .opacity(p.height > 30 ? 0.6 : 0),  // hide grip on tiny events
-                )
-                .contentShape(Rectangle())
-                .gesture(resizeGesture(for: p))
+            // Midnight splits a trip into visual segments. Only its actual
+            // endpoint may resize the event.
+            if !p.continuesToNextDay {
+                Rectangle()
+                    .fill(Color.clear)
+                    .frame(height: min(12, p.height))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 1.5)
+                            .fill(textColor.opacity(0.8))
+                            .frame(width: min(16, p.width), height: 3)
+                            .opacity(p.height > 30 ? 0.6 : 0)
+                    )
+                    .contentShape(Rectangle())
+                    .gesture(resizeGesture(for: p))
+            }
         }
         .scaleEffect(isDragging && mode == .move ? 1.04 : 1.0)
         .shadow(color: isDragging ? .black.opacity(0.25) : .clear, radius: isDragging ? 8 : 0, y: isDragging ? 4 : 0)
@@ -551,9 +558,9 @@ struct WeekView: View {
                 let snapped = Int((rawMin / 15.0).rounded()) * 15
                 if abs(snapped) < 5 { return }
                 guard let originalEvent = events.first(where: { $0.id == s.eventId && $0.startsAt == s.origStart }) else { return }
-                let newEnd = Calendar.current.date(byAdding: .minute, value: snapped, to: s.origEnd)!
+                let newEnd = displayCalendar.date(byAdding: .minute, value: snapped, to: s.origEnd)!
                 // Don't allow newEnd to dip below newStart + 15 min.
-                let minEnd = Calendar.current.date(byAdding: .minute, value: 15, to: originalEvent.startsAt)!
+                let minEnd = displayCalendar.date(byAdding: .minute, value: 15, to: originalEvent.startsAt)!
                 let finalEnd = max(newEnd, minEnd)
                 let move = PendingMove(event: originalEvent, newStart: originalEvent.startsAt, newEnd: finalEnd)
                 if originalEvent.rrule != nil {
@@ -613,8 +620,8 @@ struct WeekView: View {
                 guard let originalEvent = events.first(where: { $0.id == s.eventId && $0.startsAt == s.origStart }) else { return }
                 // A calendar day can be 23 or 25 hours. Horizontal movement
                 // keeps the clock reading; the event's elapsed duration stays.
-                guard let shiftedDay = Calendar.current.date(byAdding: .day, value: snapped.dayDelta, to: s.origStart),
-                      let newStart = Calendar.current.date(byAdding: .minute, value: snapped.minuteDelta, to: shiftedDay) else { return }
+                guard let shiftedDay = displayCalendar.date(byAdding: .day, value: snapped.dayDelta, to: s.origStart),
+                      let newStart = displayCalendar.date(byAdding: .minute, value: snapped.minuteDelta, to: shiftedDay) else { return }
                 let newEnd = newStart.addingTimeInterval(s.origEnd.timeIntervalSince(s.origStart))
                 let move = PendingMove(event: originalEvent, newStart: newStart, newEnd: newEnd)
                 if originalEvent.rrule != nil {
@@ -666,7 +673,7 @@ struct WeekView: View {
     }
 
     private func eventsForDay(_ day: Date) -> [EventDTO] {
-        let calendar = Calendar.current
+        let calendar = displayCalendar
         let start = calendar.startOfDay(for: day)
         let end = calendar.date(byAdding: .day, value: 1, to: start) ?? start
         return events.filter { event in
@@ -678,7 +685,7 @@ struct WeekView: View {
     // Returns the day-column index (0-6) for a given start date, if
     // it falls within the visible week. Used to seed DragState.
     private func dayIndex(for date: Date) -> Int? {
-        let cal = Calendar.current
+        let cal = displayCalendar
         for (i, day) in dayStarts.enumerated() where cal.isDate(date, inSameDayAs: day) {
             return i
         }
@@ -743,7 +750,7 @@ struct WeekView: View {
 
     private func nowLineContent(at now: Date) -> some View {
         GeometryReader { geo in
-            let cal = Calendar.current
+            let cal = displayCalendar
             if let todayIdx = dayStarts.firstIndex(where: { cal.isDateInToday($0) }) {
                 let columnWidth = gridColumnWidth(geo.size.width)
                 let hour = cal.component(.hour, from: now)
@@ -774,7 +781,7 @@ struct WeekView: View {
     // MARK: - Event positioning (with overlap clusters)
     private func positionedEvents(width columnWidth: CGFloat) -> [PositionedEvent] {
         var out: [PositionedEvent] = []
-        let cal = Calendar.current
+        let cal = displayCalendar
 
         for (dayIdx, day) in dayStarts.enumerated() {
             // Events that touch this day (start before day-end and end
@@ -811,12 +818,11 @@ struct WeekView: View {
                 let slotWidth = columnWidth / count
                 for (i, ev) in cluster.enumerated() {
                     // Clip to the day's bounds
-                    let s = max(ev.startsAt, dayStart)
-                    let e = min(ev.endsAt, dayEnd)
-                    let startMin = cal.component(.hour, from: s) * 60 + cal.component(.minute, from: s)
-                    let durMin = max(15, Int(e.timeIntervalSince(s) / 60))  // floor at 15 min so 0-min events still render
-                    let y = CGFloat(startMin) / 60.0 * hourHeight
-                    let h = CGFloat(durMin) / 60.0 * hourHeight
+                    let minutes = CalendarDisplayDates.timelineMinutes(
+                        start: ev.startsAt, end: ev.endsAt, day: DateInterval(start: dayStart, end: dayEnd), calendar: cal
+                    )
+                    let y = CGFloat(minutes.lowerBound / 60) * hourHeight
+                    let h = CGFloat((minutes.upperBound - minutes.lowerBound) / 60) * hourHeight
                     let x = timeGutterWidth + CGFloat(dayIdx) * columnWidth + CGFloat(i) * slotWidth
                     out.append(PositionedEvent(
                         id: "\(ev.id)@\(ev.startsAt.timeIntervalSince1970)@\(dayIdx)",
@@ -832,7 +838,7 @@ struct WeekView: View {
                         // always clipped away. The floor lets a short
                         // block lap a few points over the next hour line
                         // rather than render text-less. y is untouched.
-                        height: max(h - 2, 22),
+                        height: min(max(h - 2, 22), max(0, 24 * hourHeight - y)),
                         continuesFromPreviousDay: ev.startsAt < dayStart,
                         continuesToNextDay: ev.endsAt > dayEnd,
                     ))
@@ -846,7 +852,7 @@ struct WeekView: View {
         // 以前这里拿本地时区的日界去比全天事件的 startsAt/endsAt，
         // 而全天存的是 UTC 午夜 —— 东八区里一个「9 月 21 日」的全天事件
         // 会同时落进 21 日和 22 日两格，界面上并排画两遍。见 AllDayDates。
-        let cal = Calendar.current
+        let cal = displayCalendar
         var out: [Date: [EventDTO]] = [:]
         for ev in allDayEvents {
             for day in dayStarts where AllDayDates.occupies(ev, localDay: day, calendar: cal) {
@@ -880,11 +886,6 @@ private struct CreateSeedItem: Identifiable {
     let start: Date
 }
 
-private struct DayListItem: Identifiable {
-    let date: Date
-    var id: Date { date }
-}
-
 private extension EventDTO {
     var weekOccurrenceKey: String { "\(id)@\(startsAt.timeIntervalSince1970)" }
 }
@@ -916,8 +917,9 @@ private struct PendingMove {
 
 private struct DayHeader: View {
     let day: Date
+    let calendar: Calendar
     var body: some View {
-        let cal = Calendar.current
+        let cal = calendar
         let isToday = cal.isDateInToday(day)
         VStack(spacing: 2) {
             Text(weekdayLabel(day))
@@ -931,6 +933,6 @@ private struct DayHeader: View {
         }
     }
     private func weekdayLabel(_ d: Date) -> String {
-        DateFormatters.weekdayShort.string(from: d)
+        DateFormatters.localFormatter("EEE", template: false, zone: calendar.timeZone).string(from: d)
     }
 }

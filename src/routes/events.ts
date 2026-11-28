@@ -61,6 +61,11 @@ const laxAlarmText = (max: number) =>
 export const extraSchema = z.object({
   category: z.string().max(50).nullable().optional(),
   timezone: z.string().max(100).nullable().optional(),
+  // Arrival timezone is independent from the start/recurrence anchor.
+  // Omitted preserves it; null clears it so the end inherits the start.
+  endTimezone: z.string().max(100).refine((value) => canonicalTimeZone(value) !== null,
+    { message: "Invalid IANA end timezone" }).transform((value) => canonicalTimeZone(value)!)
+    .nullable().optional(),
   // 两种写法都收，存进库的永远只有一种（见 lib/attendees.ts 的口径：小写去重的邮箱字符串数组）。
   // 字符串那一路是网页 / 三端发的，邮箱写错要当场告诉用户，所以照旧严格判；
   // 对象那一路是 CalDAV 存量行被网页原样回传，宽进 —— 它不是用户这次输入的东西，

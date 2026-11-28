@@ -67,6 +67,8 @@ struct EventAlarmDTO: Codable, Hashable {
 // drift if needed without breaking each other.
 struct EventExtraDTO: Codable, Hashable {
     let timezone: String?
+    // Optional arrival zone. Missing means the same zone as the start.
+    let endTimezone: String?
     let attendees: [String]?
     let category: String?
     // v1.3.3 — Meeting/document link, e.g. Zoom URL. Same JSONB field
@@ -132,7 +134,8 @@ struct GeoSuggestResponse: Decodable {
 
 // Extra metadata bag that piggybacks on POST/PATCH /events. Mirrors
 // server extraSchema in src/routes/events.ts:
-//   - timezone: IANA tz name (e.g. "Asia/Shanghai") to interpret start/end in
+//   - timezone: IANA start zone and recurrence anchor (e.g. "Asia/Shanghai")
+//   - endTimezone: optional arrival zone; missing means the start zone
 //   - attendees: email list — server fires invitation .ics emails on insert
 //   - category: optional grouping label
 /// 请求体里一个 extra 字段的三种命运。
@@ -159,14 +162,16 @@ struct EventExtra: Encodable {
     let url: ExtraField<String>
     let meetingPassword: ExtraField<String>
     let alarms: ExtraField<[EventAlarmDTO]>
+    var endTimezone: ExtraField<String> = .unmanaged
 
     enum CodingKeys: String, CodingKey {
-        case timezone, attendees, category, url, meetingPassword, alarms
+        case timezone, endTimezone, attendees, category, url, meetingPassword, alarms
     }
 
     func encode(to encoder: Encoder) throws {
         var c = encoder.container(keyedBy: CodingKeys.self)
         try put(timezone, .timezone, &c)
+        try put(endTimezone, .endTimezone, &c)
         try put(attendees, .attendees, &c)
         try put(category, .category, &c)
         try put(url, .url, &c)
@@ -394,6 +399,42 @@ struct BookingLinkUpdateInput: Encodable {
 /// All-day API timestamps carry a Gregorian date at UTC boundaries. Convert
 /// that date into the device's local picker without shifting it a day.
 enum EventEditorDates {
+    static func endpointTimeZones(start: String?, end: String?, calendar: String?, device: TimeZone) -> (start: TimeZone, end: TimeZone) {
+        func zone(_ identifier: String?) -> TimeZone? {
+            guard let identifier = identifier?.trimmingCharacters(in: .whitespacesAndNewlines), !identifier.isEmpty else { return nil }
+            return TimeZone(identifier: identifier)
+        }
+        let origin = zone(start) ?? zone(calendar) ?? device
+        return (origin, zone(end) ?? origin)
+    }
+
+    static func isChronological(start: Date, end: Date) -> Bool {
+        end.timeIntervalSinceReferenceDate >= start.timeIntervalSinceReferenceDate
+    }
+
+    /// A repeated local clock time can identify two different instants.
+    /// Preserve the original instant and fractional seconds when offering
+    /// both offsets; ordinary local times must remain an exact no-op.
+    static func repeatedTimeAlternatives(for value: Date, in zone: TimeZone) -> [Date] {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = zone
+        let fields: Set<Calendar.Component> = [.era, .year, .month, .day, .hour, .minute, .second]
+        let clock = calendar.dateComponents(fields, from: value)
+        // Foundation's first/last matching policies miss some half-hour
+        // folds. Try the offsets observed around this instant and retain
+        // only candidates with the exact same local date and clock fields.
+        let currentOffset = zone.secondsFromGMT(for: value)
+        let offsets = Set([-172800.0, -86400, -21600, -3600, 0, 3600, 21600, 86400, 172800].map {
+            zone.secondsFromGMT(for: value.addingTimeInterval($0))
+        })
+        let alternatives = offsets.compactMap { offset -> Date? in
+            let candidate = value.addingTimeInterval(Double(currentOffset - offset))
+            return calendar.dateComponents(fields, from: candidate) == clock ? candidate : nil
+        }
+        let unique = Set(alternatives + [value]).sorted { $0.timeIntervalSinceReferenceDate < $1.timeIntervalSinceReferenceDate }
+        return unique.count > 1 ? unique : [value]
+    }
+
     static func timedISO(_ value: Date) -> String {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
@@ -408,11 +449,31 @@ enum EventEditorDates {
         return local.date(from: utc.dateComponents([.year, .month, .day, .hour, .minute, .second], from: value)) ?? value
     }
 
-    static func duplicate(start: Date, end: Date, allDay: Bool, from nextStart: Date, calendar: Calendar = .current) -> (Date, Date) {
-        guard allDay else { return (nextStart, nextStart.addingTimeInterval(max(end.timeIntervalSince(start), 900))) }
+    static func lastInclusiveAllDay(end: Date, start: Date) -> Date {
         var utc = Calendar(identifier: .gregorian)
         utc.timeZone = TimeZone(secondsFromGMT: 0)!
-        let days = max(0, utc.dateComponents([.day], from: utc.startOfDay(for: start), to: utc.startOfDay(for: end)).day ?? 0)
+        let endDay = utc.startOfDay(for: end)
+        let exclusiveEnd = end == endDay && end.timeIntervalSinceReferenceDate > start.timeIntervalSinceReferenceDate
+        return exclusiveEnd ? (utc.date(byAdding: .day, value: -1, to: endDay) ?? endDay) : endDay
+    }
+
+    static func allDayEditorRange(start: Date, end: Date, calendar: Calendar = .current) -> (start: Date, end: Date) {
+        let lastIncluded = lastInclusiveAllDay(end: end, start: start)
+        let first = calendar.startOfDay(for: localAllDay(start, calendar: calendar))
+        let lastDay = localAllDay(lastIncluded, calendar: calendar)
+        let last = calendar.date(bySettingHour: 23, minute: 59, second: 59, of: lastDay) ?? lastDay
+        return (first, last)
+    }
+
+    static func duplicate(start: Date, end: Date, allDay: Bool, from nextStart: Date, calendar: Calendar = .current) -> (Date, Date) {
+        guard allDay else {
+            let duration = end.timeIntervalSince(start)
+            return (nextStart, nextStart.addingTimeInterval(duration >= 0 ? duration : 900))
+        }
+        var utc = Calendar(identifier: .gregorian)
+        utc.timeZone = TimeZone(secondsFromGMT: 0)!
+        let included = allDayEditorRange(start: start, end: end, calendar: utc)
+        let days = max(0, utc.dateComponents([.day], from: utc.startOfDay(for: included.start), to: utc.startOfDay(for: included.end)).day ?? 0)
         let first = calendar.startOfDay(for: nextStart)
         let lastDay = calendar.date(byAdding: .day, value: days, to: first) ?? first
         let last = calendar.date(bySettingHour: 23, minute: 59, second: 59, of: lastDay) ?? lastDay

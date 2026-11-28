@@ -26,7 +26,7 @@ export function buildIcsFeed(calendar: Calendar, events: Event[], opts: { full?:
     const extra = (ev.extra ?? null) as null | {
       attendees?: unknown; organizer?: string | null; alarms?: unknown;
       transp?: string | null; status?: string | null; categories?: string[] | null;
-      category?: string | null; url?: string | null;
+      category?: string | null; url?: string | null; endTimezone?: string | null;
     };
     return {
       uid: ev.uid,
@@ -38,6 +38,7 @@ export function buildIcsFeed(calendar: Calendar, events: Event[], opts: { full?:
       allDay: ev.allDay,
       rrule: ev.rrule,
       exdates: ev.rrule && Array.isArray(ev.exdates) ? (ev.exdates as string[]) : null,
+      endTimezone: extra?.endTimezone ?? null,
       timezone: exportTimeZone({
         allDay: ev.allDay, extra: ev.extra, calendarTimezone: calendar.timezone, rrule: ev.rrule,
         // 手机写上来时 DTSTART 就是 UTC 的，服务端按 UTC 展开（见 event_zone.ts），这里也按 UTC 写。

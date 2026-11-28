@@ -801,3 +801,23 @@
 "这张清单的条目已达上限。" = "Diese Liste hat die maximale Anzahl an Einträgen erreicht.";
 "这个事件已经不存在了，无法关联。" = "Dieser Termin existiert nicht mehr, die Liste konnte nicht verknüpft werden.";
 "切换侧边栏" = "Seitenleiste ein- oder ausblenden";
+
+"calendar.selectDate" = "Datum auswählen";
+
+"event.trip.localTimes" = "Ortszeiten der Reise";
+"event.trip.departure" = "Abreise";
+"event.trip.arrival" = "Ankunft";
+"event.trip.viewerTime" = "Meine Ortszeit";
+
+// Event endpoint time zones
+"event.timezone.start" = "Zeitzone des Beginns";
+"event.timezone.end" = "Zeitzone des Endes";
+"event.timezone.search" = "Stadt oder Zeitzone suchen";
+"event.timezone.keepsInstant" = "Ein Zeitzonenwechsel behält denselben Zeitpunkt bei. Ändere Datum und Ortszeit, um den Termin zu verschieben.";
+"event.timezone.invalidOrder" = "Das Ende darf nicht vor dem Beginn liegen. Prüfe beide Datumsangaben und Zeitzonen.";
+"event.timezone.elapsed" = "Tatsächliche Dauer";
+"event.timezone.repeatedTime" = "Doppelte Ortszeit";
+
+"event.timezone.invalidDates" = "Das Enddatum darf nicht vor dem Startdatum liegen.";
+
+"event.timezone.invalidLocalDate" = "Dieses lokale Datum oder diese Uhrzeit existiert in der ausgewählten Zeitzone nicht. Wähle ein anderes Datum oder eine andere Uhrzeit.";

@@ -66,8 +66,7 @@ enum DateFormatters {
 
     private static let localCache = NSCache<NSString, DateFormatter>()
 
-    private static func localFormatter(_ pattern: String, template: Bool) -> DateFormatter {
-        let zone = NSTimeZone.default
+    static func localFormatter(_ pattern: String, template: Bool, zone: TimeZone = NSTimeZone.default) -> DateFormatter {
         let locale = Locale.current
         let key = "\(zone.identifier)|\(locale.identifier)|\(template)|\(pattern)" as NSString
         if let cached = localCache.object(forKey: key) { return cached }

@@ -235,15 +235,22 @@ enum PendingOpLogic {
         if let v = obj["allDay"] as? Bool { allDay = v }
         if let v = obj["rrule"] as? String { rrule = v.isEmpty ? nil : v }
         if let v = obj["exdates"] as? [String] { exdates = v }
-        if let extraObj = obj["extra"] as? [String: Any] {
+        if obj["extra"] is NSNull {
+            extra = nil
+        } else if let extraObj = obj["extra"] as? [String: Any] {
             var base: [String: Any] = [:]
             if let existing = dto.extra,
                let data = try? JSONEncoder.iso().encode(existing),
                let decoded = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
                 base = decoded
             }
-            for (k, v) in extraObj { base[k] = v }
-            if let data = try? JSONSerialization.data(withJSONObject: base),
+            for (k, v) in extraObj {
+                if v is NSNull { base.removeValue(forKey: k) }
+                else { base[k] = v }
+            }
+            if base.isEmpty {
+                extra = nil
+            } else if let data = try? JSONSerialization.data(withJSONObject: base),
                let decoded = try? JSONDecoder.iso().decode(EventExtraDTO.self, from: data) {
                 extra = decoded
             }

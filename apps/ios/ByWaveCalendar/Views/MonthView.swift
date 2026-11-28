@@ -16,25 +16,22 @@ struct MonthView: View {
     let calendars: [CalendarMeta]
     let onEventChanged: () -> Void
 
-    private struct DaySelection: Identifiable {
-        let date: Date
-        var id: Date { date }
-    }
-
-    @State private var selectedDay: DaySelection?
+    @State private var selectedDay: CalendarDaySelection?
     @ScaledMetric(relativeTo: .callout) private var dateBadgeSize: CGFloat = 24
     @ScaledMetric(relativeTo: .caption2) private var eventFontSize: CGFloat = 11
     @ScaledMetric(relativeTo: .caption2) private var eventLineHeight: CGFloat = 14
 
-    private let calendar: Calendar = {
+    @Environment(\.timeZone) private var displayTimeZone
+    private var calendar: Calendar {
         var c = Calendar(identifier: .gregorian)
+        c.timeZone = displayTimeZone
         c.firstWeekday = 2  // Monday-first to match the web
         // Grid math uses the explicit firstWeekday above; the locale only
         // feeds any symbol lookups, so it must follow the app language
         // (was hardcoded zh_CN → leaked Chinese in non-zh UI).
         c.locale = Locale.current
         return c
-    }()
+    }
 
     private var monthStart: Date {
         calendar.dateInterval(of: .month, for: monthAnchor)?.start ?? monthAnchor
@@ -72,14 +69,12 @@ struct MonthView: View {
         return m
     }
 
-    /// 格子里实际挂的条：全天事件挂它占的每一格，定时事件只挂
-    /// 开始日一格（见 AllDayDates.showsInMonthCell）。跨午夜的
-    /// 定时事件若在次日格子里再挂一条，看起来像重复事件。
     private var chipEventsByDay: [Date: [EventDTO]] {
+        let zones = Dictionary(uniqueKeysWithValues: calendars.compactMap { cal in cal.timezone.map { (cal.id, $0) } })
         var m = [Date: [EventDTO]]()
         for day in days {
             let list = events
-                .filter { AllDayDates.showsInMonthCell($0, localDay: day, calendar: calendar) }
+                .filter { AllDayDates.showsInMonthCell($0, localDay: day, calendar: calendar, calendarZone: zones[$0.calendarId]) }
                 .sorted { $0.startsAt < $1.startsAt }
             if !list.isEmpty { m[calendar.startOfDay(for: day)] = list }
         }
@@ -109,6 +104,7 @@ struct MonthView: View {
                             } label: {
                                 DayCell(
                                     day: day,
+                                    calendar: calendar,
                                     inMonth: calendar.isDate(day, equalTo: monthAnchor, toGranularity: .month),
                                     isToday: calendar.isDateInToday(day),
                                     events: chips[calendar.startOfDay(for: day)] ?? [],
@@ -158,7 +154,7 @@ struct MonthView: View {
             .safeAreaPadding(.bottom)
         }
         .sheet(item: $selectedDay) { selection in
-            let day = selection.date
+            let day = selection.date(in: calendar, fallback: monthAnchor)
             NavigationStack {
                 DayView(
                     anchor: day,
@@ -179,7 +175,7 @@ struct MonthView: View {
     }
 
     private func openDay(_ day: Date) {
-        selectedDay = DaySelection(date: calendar.startOfDay(for: day))
+        selectedDay = CalendarDaySelection(day, calendar: calendar)
     }
 
     private var weekdayHeader: some View {
@@ -213,13 +209,14 @@ struct MonthView: View {
     }
 
     private func dayTitle(_ d: Date) -> String {
-        DateFormatters.monthDay.string(from: d)
+        DateFormatters.localFormatter("MMMd", template: true, zone: displayTimeZone).string(from: d)
     }
 }
 
 // One cell in the month grid.
 private struct DayCell: View {
     let day: Date
+    let calendar: Calendar
     let inMonth: Bool
     let isToday: Bool
     let events: [EventDTO]
@@ -230,7 +227,7 @@ private struct DayCell: View {
     let eventFontSize: CGFloat
     let eventLineHeight: CGFloat
 
-    private var dayNumber: Int { Calendar.current.component(.day, from: day) }
+    private var dayNumber: Int { calendar.component(.day, from: day) }
 
     private var calLookup: [String: CalendarMeta] {
         Dictionary(uniqueKeysWithValues: calendars.map { ($0.id, $0) })
@@ -260,6 +257,11 @@ private struct DayCell: View {
                         RoundedRectangle(cornerRadius: 1.5)
                             .fill(Color(hex: calLookup[ev.calendarId]?.color) ?? .accentColor)
                             .frame(width: 3, height: eventLineHeight - 2)
+                        if !ev.allDay && !calendar.isDate(ev.startsAt, inSameDayAs: day) {
+                            Image(systemName: "arrow.turn.down.right")
+                                .font(.system(size: eventFontSize))
+                                .foregroundStyle(.secondary)
+                        }
                         Text(ev.summary)
                             .font(.system(size: eventFontSize, weight: .medium))
                             .foregroundStyle(.primary)

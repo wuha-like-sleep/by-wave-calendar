@@ -801,3 +801,23 @@
 "这张清单的条目已达上限。" = "이 목록의 항목 수 상한에 도달했습니다.";
 "这个事件已经不存在了，无法关联。" = "그 일정이 더 이상 존재하지 않아 연결할 수 없습니다.";
 "切换侧边栏" = "사이드바 전환";
+
+"calendar.selectDate" = "날짜 선택";
+
+"event.trip.localTimes" = "여정 현지 시간";
+"event.trip.departure" = "출발";
+"event.trip.arrival" = "도착";
+"event.trip.viewerTime" = "내 현지 시간";
+
+// Event endpoint time zones
+"event.timezone.start" = "시작 시간대";
+"event.timezone.end" = "종료 시간대";
+"event.timezone.search" = "도시 또는 시간대 검색";
+"event.timezone.keepsInstant" = "시간대를 바꿔도 실제 시점은 유지됩니다. 일정을 옮기려면 현지 날짜와 시간을 수정하세요.";
+"event.timezone.invalidOrder" = "종료는 시작보다 빠를 수 없습니다. 양쪽 날짜와 시간대를 확인하세요.";
+"event.timezone.elapsed" = "실제 소요 시간";
+"event.timezone.repeatedTime" = "반복되는 현지 시각";
+
+"event.timezone.invalidDates" = "종료일은 시작일보다 빠를 수 없습니다.";
+
+"event.timezone.invalidLocalDate" = "선택한 시간대에 이 현지 날짜나 시간이 존재하지 않습니다. 다른 날짜나 시간을 선택하세요.";

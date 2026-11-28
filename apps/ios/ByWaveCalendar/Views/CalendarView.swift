@@ -48,7 +48,6 @@ struct CalendarView: View {
     @EnvironmentObject var state: AppState
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @ScaledMetric(relativeTo: .callout) private var weekStripDayDiameter: CGFloat = 34
     @State private var deviceTimeZone = DateFormatters.refreshDeviceTimeZone()
@@ -68,6 +67,8 @@ struct CalendarView: View {
     @State private var showingFilter = false
     @State private var showingSearch = false
     @State private var showingProfileSwitcher = false
+    @State private var showingAnchorPicker = false
+    @State private var showingCalendarError = false
     // ICS import: the fileImporter toggle, plus the file (picked or
     // handed over by the system) whose confirmation sheet is showing.
     @State private var showingImportPicker = false
@@ -83,17 +84,31 @@ struct CalendarView: View {
     // back; this collapses them into one after the user pauses.
     @State private var navDebounceTask: Task<Void, Never>?
 
-    /// 展开的大画布（Duo 展开 / iPad）= regular 宽度；折叠 Duo 与
-    /// 普通 iPhone 都是 compact。两种画布是两个独立的布局目标，
-    /// 不是同一套布局的拉伸与否。
-    @State private var sidebarCollapsed = false
-    private var useSplitLayout: Bool { horizontalSizeClass == .regular && !sidebarCollapsed }
+    private var viewingCalendar: Calendar {
+        var cal = Calendar.current
+        cal.timeZone = deviceTimeZone
+        return cal
+    }
+
+    private func refreshViewingTimeZone() {
+        let zone = DateFormatters.refreshDeviceTimeZone()
+        guard zone.identifier != deviceTimeZone.identifier else { return }
+        anchor = CalendarDisplayDates.selectedDay(anchor, now: Date(), calendar: .current, from: deviceTimeZone, to: zone)
+        deviceTimeZone = zone
+    }
 
     var body: some View {
-        MainTabView(sidebarCollapsed: $sidebarCollapsed, pendingInvitationCount: pendingInvitationCount) {
-            calendarWithSheets
+        MainTabView(pendingInvitationCount: pendingInvitationCount) { layout in
+            calendarWithSheets(layout)
         } calendarTools: {
             sidebarSections
+        }
+        .environment(\.timeZone, deviceTimeZone)
+        .onReceive(NotificationCenter.default.publisher(for: .NSSystemTimeZoneDidChange)) { _ in
+            refreshViewingTimeZone()
+        }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active { refreshViewingTimeZone() }
         }
         // 撤销删除 snackbar (v1.6.2, 对齐 Android/桌面)。挂在 NavigationStack
         // 外层——详情页里删除、pop 动画还没结束时它就已经可见,而不是等回到
@@ -125,22 +140,22 @@ struct CalendarView: View {
     // 后半的 sheet / fileImporter / 手势。修饰符顺序与原来逐字一致，
     // 行为不变。
     @ViewBuilder
-    private var calendarWithSheets: some View {
-        calendarContent
+    private func calendarWithSheets(_ layout: CalendarNavigationLayout) -> some View {
+        calendarContent(layout)
             .sheet(isPresented: $showingCreate) {
                 NavigationStack {
                     EventEditView(
                         mode: .create,
                         calendars: calendars,
-                        prefilledStart: Calendar.current.isDateInToday(anchor)
-                            ? nil : Calendar.current.date(bySettingHour: 9, minute: 0, second: 0, of: anchor),
+                        prefilledStart: viewingCalendar.isDateInToday(anchor)
+                            ? nil : viewingCalendar.date(bySettingHour: 9, minute: 0, second: 0, of: anchor),
                         onSaved: { saved in
                             showingCreate = false
                             // 动线: jump to the day the new event lives on,
                             // so「明天下午3点开会」lands you ON tomorrow
                             // instead of leaving you staring at today.
                             withAnimation {
-                                anchor = Calendar.current.startOfDay(for: saved.startsAt)
+                                anchor = viewingCalendar.startOfDay(for: saved.startsAt)
                             }
                             Task { await load(force: true) }
                         },
@@ -232,7 +247,7 @@ struct CalendarView: View {
     }
 
     @ViewBuilder
-    private var calendarContent: some View {
+    private func calendarContent(_ layout: CalendarNavigationLayout) -> some View {
             VStack(spacing: 0) {
                 // 「某个账号被服务端登出、已切到这个账号」的提示。放在导航栏下面、
                 // 视图切换条上面：放到 NavigationStack 外面（safeAreaInset）的话，
@@ -256,44 +271,55 @@ struct CalendarView: View {
                 PendingSyncBarView(service: state.offlineSync) {
                     showingPendingOps = true
                 }
-                navBar
-                ZStack(alignment: .top) {
-                    contentForMode
-                        .id(deviceTimeZone.identifier)
-                        // Without these the WeekView's outer VStack would
-                        // be vertically centered inside the ZStack (default
-                        // .center alignment), pushing the date headers and
-                        // time grid into the middle of the screen with
-                        // empty space above. Day/Month/Year are all happy
-                        // to fill too.
-                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-                        // 日/周/月/年切换走交叉淡入淡出，别硬切：四个视图
-                        // 布局差异大，滑动式过渡反而会显得乱，淡入最稳。
-                        .transition(.opacity)
-                    // 还没有任何结果（缓存没读出来、第一次请求也还没回）时同样显示加载中。
-                    // 以前只看 isLoading，而 .task 开跑之前那一段它还是 false，
-                    // 冷启动先闪一下「今天没有事件」，几秒后日程才冒出来。
-                    if showsInitialLoading {
-                        // Cache miss + first fetch in flight
-                        ProgressView()
-                            .frame(maxWidth: .infinity, maxHeight: .infinity)
-                            .background(Color(.systemGroupedBackground))
-                            .transition(.opacity)
+                // Measure the space left after notices and pending changes,
+                // rather than assuming the device's full screen is available.
+                GeometryReader { geometry in
+                    VStack(spacing: 0) {
+                        navBar(layout, height: geometry.size.height)
+                        ZStack(alignment: .top) {
+                            contentForMode(layout)
+                                // Without these the WeekView's outer VStack would
+                                // be vertically centered inside the ZStack (default
+                                // .center alignment), pushing the date headers and
+                                // time grid into the middle of the screen with
+                                // empty space above. Day/Month/Year are all happy
+                                // to fill too.
+                                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                                // 日/周/月/年切换走交叉淡入淡出，别硬切：四个视图
+                                // 布局差异大，滑动式过渡反而会显得乱，淡入最稳。
+                                .transition(.opacity)
+                            // 还没有任何结果（缓存没读出来、第一次请求也还没回）时同样显示加载中。
+                            // 以前只看 isLoading，而 .task 开跑之前那一段它还是 false，
+                            // 冷启动先闪一下「今天没有事件」，几秒后日程才冒出来。
+                            if showsInitialLoading {
+                                // Cache miss + first fetch in flight
+                                ProgressView()
+                                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                                    .background(Color(.systemGroupedBackground))
+                                    .transition(.opacity)
+                            }
+                        }
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .animation(reduceMotion ? nil : .easeInOut(duration: 0.2), value: mode)
+                        .animation(reduceMotion ? nil : .easeOut(duration: 0.2), value: showsInitialLoading)
                     }
                 }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .animation(reduceMotion ? nil : .easeInOut(duration: 0.2), value: mode)
-                .animation(reduceMotion ? nil : .easeOut(duration: 0.2), value: showsInitialLoading)
             }
             .animation(.snappy, value: state.accountNotice)
             .animation(.snappy, value: state.pendingAnnouncement)
+            .sheet(isPresented: $showingAnchorPicker) { anchorPickerSheet }
+            .alert("上次同步失败", isPresented: $showingCalendarError) {
+                Button("关闭", role: .cancel) {}
+            } message: {
+                Text(errorMessage ?? "")
+            }
             .navigationTitle(navTitle.loc)
             .navigationBarTitleDisplayMode(.inline)
             // 展开态所有按钮都进侧边栏（见 sidebar），详情页顶部
             // 不留工具栏 —— 用户原话：按钮在侧面，不是在上方。
             // 折叠 / 普通 iPhone 没有侧边栏，工具栏照旧全套。
             .toolbar {
-                if !useSplitLayout {
+                if !layout.showsCalendarTools {
                     #if canImport(SwiftUI, _version: 8.1)
                     if #available(iOS 27.1, *) {
                         calendarToolbar.axisBehavior(.verticalPreferred)
@@ -320,15 +346,10 @@ struct CalendarView: View {
                 await refreshInvitationBadge()
                 if !Task.isCancelled && scenePhase == .active { startPolling() }
             }
-            .environment(\.timeZone, deviceTimeZone)
-            .onReceive(NotificationCenter.default.publisher(for: .NSSystemTimeZoneDidChange)) { _ in
-                deviceTimeZone = DateFormatters.refreshDeviceTimeZone()
-            }
             .onDisappear { stopPolling() }
             .onChange(of: scenePhase) { _, new in
                 // Returning to foreground → refresh + restart polling.
                 if new == .active {
-                    deviceTimeZone = DateFormatters.refreshDeviceTimeZone()
                     Task { await load(force: false) }
                     // 回前台也是离线队列的重放触发点：后台期间攒的 /
                     // 退避到期的条目在这里续推。
@@ -372,11 +393,11 @@ struct CalendarView: View {
     private var calendarToolbar: some ToolbarContent {
         ToolbarItem(placement: .topBarLeading) {
             Button {
-                anchor = Calendar.current.startOfDay(for: Date())
+                anchor = viewingCalendar.startOfDay(for: Date())
             } label: {
                 Text("今天").font(.callout.weight(.medium))
             }
-            .disabled(Calendar.current.isDateInToday(anchor) && mode == .day)
+            .disabled(viewingCalendar.isDateInToday(anchor) && mode == .day)
         }
         // Profile-switcher button — Google-style avatar circle
         // top-right. Tinted with brand accent, first letter of
@@ -500,7 +521,7 @@ struct CalendarView: View {
     }
 
     private var anchorButton: some View {
-        Button { anchor = Calendar.current.startOfDay(for: Date()) } label: {
+        Button { anchor = viewingCalendar.startOfDay(for: Date()) } label: {
             Text(mode == .day && dynamicTypeSize.isAccessibilitySize
                  ? anchor.formatted(.dateTime.month().day()) : anchorLabel)
                 .font(.callout.weight(.medium))
@@ -559,7 +580,7 @@ struct CalendarView: View {
     /// 今天红字，选中日品牌色实心圈；整条下面居中是选中日的
     /// 农历全称（干支年 + 月 + 日）。
     private var dayWeekStrip: some View {
-        let cal = Calendar.current
+        let cal = viewingCalendar
         let start = startOfWeek(anchor)
         let diameter = min(weekStripDayDiameter, 48)
         return VStack(spacing: 2) {
@@ -632,7 +653,7 @@ struct CalendarView: View {
         }
         Section {
             MiniMonthView(anchor: anchor) { day in
-                anchor = Calendar.current.startOfDay(for: day)
+                anchor = viewingCalendar.startOfDay(for: day)
             }
             .listRowInsets(EdgeInsets(top: 10, leading: 14, bottom: 10, trailing: 14))
         }
@@ -703,10 +724,19 @@ struct CalendarView: View {
     }
 
     // MARK: - Header (mode picker + nav arrows + anchor date)
-    private var navBar: some View {
+    @ViewBuilder
+    private func navBar(_ layout: CalendarNavigationLayout, height: CGFloat) -> some View {
+        if !layout.showsCalendarTools && height < (dynamicTypeSize.isAccessibilitySize ? 420 : 320) {
+            shortHeightNavigation
+        } else {
+            fullHeightNavigation(layout)
+        }
+    }
+
+    private func fullHeightNavigation(_ layout: CalendarNavigationLayout) -> some View {
         VStack(spacing: 6) {
             // 展开态这两组控件在侧边栏里，内容区顶部只留同步/错误状态行。
-            if !useSplitLayout {
+            if !layout.showsCalendarTools {
                 Picker("视图", selection: $mode) {
                     ForEach(ViewMode.allCases) { Text($0.rawValue.loc).tag($0) }
                 }
@@ -714,7 +744,7 @@ struct CalendarView: View {
                 .padding(.horizontal, 14)
             }
 
-            if !useSplitLayout {
+            if !layout.showsCalendarTools {
                 dateNavRow
                     .padding(.horizontal, 14)
                     .padding(.bottom, 4)
@@ -722,7 +752,7 @@ struct CalendarView: View {
 
             // 紧凑态日视图的一周条；展开态有侧边栏迷你月历，
             // 不重复放（实现见 dayWeekStrip）。
-            if !useSplitLayout && mode == .day {
+            if !layout.showsCalendarTools && mode == .day {
                 dayWeekStrip
                     .padding(.bottom, 4)
             }
@@ -752,6 +782,121 @@ struct CalendarView: View {
         .background(Color(.systemBackground))
     }
 
+    /// Keep one 44pt control row when the calendar receives a short viewport.
+    /// The date menu retains every day in the current week; decorative lunar
+    /// labels and successful-sync text no longer displace the event canvas.
+    private var shortHeightNavigation: some View {
+        HStack(spacing: 4) {
+            Menu {
+                Section {
+                    ForEach(ViewMode.allCases) { choice in
+                        Button { mode = choice } label: {
+                            if mode == choice {
+                                Label(choice.rawValue.loc, systemImage: "checkmark")
+                            } else {
+                                Text(choice.rawValue.loc)
+                            }
+                        }
+                    }
+                }
+                if mode == .day {
+                    Section {
+                        ForEach(DayViewMode.allCases, id: \.self) { style in
+                            Button { dayViewMode = style } label: {
+                                Label(style.title.loc, systemImage: dayViewMode == style ? "checkmark" : style.symbol)
+                            }
+                        }
+                    }
+                }
+                if let synced = lastSyncedAt {
+                    Section { Text(syncedLabel(for: synced)) }
+                }
+            } label: {
+                Text(mode.rawValue.loc)
+                    .font(.callout.weight(.medium))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.5)
+                    .frame(width: 44, height: 44)
+                    .contentShape(Rectangle())
+            }
+            .accessibilityLabel(Text("视图"))
+            .accessibilityValue(Text(mode.rawValue.loc))
+            .accessibilityIdentifier("calendar.shortHeight.mode")
+
+            dateStep(-1)
+            Menu {
+                Button("calendar.selectDate", systemImage: "calendar") { showingAnchorPicker = true }
+                Button("今天") { anchor = viewingCalendar.startOfDay(for: Date()) }
+                Divider()
+                ForEach(0..<7, id: \.self) { index in
+                    let day = viewingCalendar.date(byAdding: .day, value: index, to: startOfWeek(anchor)) ?? anchor
+                    let label = day.formatted(Date.FormatStyle(
+                        date: .complete, time: .omitted, locale: .current,
+                        calendar: viewingCalendar, timeZone: viewingCalendar.timeZone
+                    ))
+                    Button {
+                        anchor = viewingCalendar.startOfDay(for: day)
+                    } label: {
+                        if viewingCalendar.isDate(day, inSameDayAs: anchor) {
+                            Label(label, systemImage: "checkmark")
+                        } else {
+                            Text(label)
+                        }
+                    }
+                }
+            } label: {
+                Text(mode == .day ? anchor.formatted(Date.FormatStyle(
+                    date: .omitted, time: .omitted, locale: .current,
+                    calendar: viewingCalendar, timeZone: viewingCalendar.timeZone
+                ).month().day()) : anchorLabel)
+                    .font(.callout.weight(.medium))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.5)
+                    .frame(maxWidth: .infinity, minHeight: 44, maxHeight: 44)
+                    .contentShape(Rectangle())
+            }
+            .accessibilityLabel(Text(anchorLabel))
+            .accessibilityHint(Text("calendar.selectDate"))
+            .accessibilityIdentifier("calendar.shortHeight.date")
+            dateStep(1)
+            if let errorMessage {
+                Button { showingCalendarError = true } label: {
+                    Image(systemName: "exclamationmark.circle.fill")
+                        .foregroundStyle(.red)
+                        .frame(width: 44, height: 44)
+                        .contentShape(Rectangle())
+                }
+                .accessibilityLabel(Text("上次同步失败"))
+                .accessibilityValue(Text(errorMessage))
+            }
+        }
+        .buttonStyle(.borderless)
+        .padding(.horizontal, 10)
+        .background(Color(.systemBackground))
+    }
+
+    private var anchorPickerSheet: some View {
+        NavigationStack {
+            ScrollView {
+                DatePicker("calendar.selectDate", selection: Binding(
+                    get: { anchor },
+                    set: { anchor = viewingCalendar.startOfDay(for: $0) }
+                ), displayedComponents: .date)
+                .datePickerStyle(.graphical)
+                .environment(\.timeZone, viewingCalendar.timeZone)
+                .environment(\.calendar, viewingCalendar)
+                .padding()
+            }
+            .navigationTitle("calendar.selectDate")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("完成") { showingAnchorPicker = false }
+                }
+            }
+        }
+    }
+
     // MARK: - Body for each mode
     // All sub-views receive events already filtered by the user's
     // hidden-calendars set so toggling visibility in CalendarFilterView
@@ -759,7 +904,7 @@ struct CalendarView: View {
     private var visibleEvents: [EventDTO] { state.visibleEvents(events) }
 
     @ViewBuilder
-    private var contentForMode: some View {
+    private func contentForMode(_ layout: CalendarNavigationLayout) -> some View {
         switch mode {
         case .day:
             // 「日」的三种形态和苹果日历的日视图菜单对齐：单日
@@ -768,7 +913,7 @@ struct CalendarView: View {
             switch dayViewMode {
             case .single, .multi:
                 WeekView(
-                    weekStart: Calendar.current.startOfDay(for: anchor),
+                    weekStart: viewingCalendar.startOfDay(for: anchor),
                     events: visibleEvents,
                     calendars: calendars,
                     onEventChanged: { Task { await load(force: true) } },
@@ -776,7 +921,7 @@ struct CalendarView: View {
                     // 紧凑态单日：上方周条已经把这天标得清清楚
                     // 楚，网格标题行关掉，免得 27 出现两遍。展开
                     // 态没有周条，标题行保留。
-                    showsDayHeader: dayViewMode == .multi || useSplitLayout,
+                    showsDayHeader: dayViewMode == .multi || layout.showsCalendarTools,
                 )
             case .list:
                 DayView(
@@ -825,13 +970,14 @@ struct CalendarView: View {
         // into every other language's UI.
         let f = DateFormatter()
         f.locale = Locale.current
+        f.timeZone = deviceTimeZone
         switch mode {
         case .day:
             f.setLocalizedDateFormatFromTemplate("yMMMdEEEE")
             return f.string(from: anchor)
         case .week:
             let start = startOfWeek(anchor)
-            let end = Calendar.current.date(byAdding: .day, value: 6, to: start)!
+            let end = viewingCalendar.date(byAdding: .day, value: 6, to: start)!
             f.setLocalizedDateFormatFromTemplate("MMMd")
             return "\(f.string(from: start)) – \(f.string(from: end))"
         case .month:
@@ -856,7 +1002,7 @@ struct CalendarView: View {
 
     // MARK: - Navigation
     private func shiftAnchor(by direction: Int) {
-        let cal = Calendar.current
+        let cal = viewingCalendar
         switch mode {
         case .day:
             anchor = cal.date(byAdding: .day, value: direction, to: anchor) ?? anchor
@@ -872,6 +1018,7 @@ struct CalendarView: View {
     // MARK: - Date math
     private func startOfWeek(_ date: Date) -> Date {
         var cal = Calendar(identifier: .gregorian)
+        cal.timeZone = deviceTimeZone
         cal.firstWeekday = 2  // Monday
         let comps = cal.dateComponents([.yearForWeekOfYear, .weekOfYear], from: date)
         return cal.date(from: comps) ?? date
@@ -880,7 +1027,7 @@ struct CalendarView: View {
     private func eventsForDay(_ day: Date) -> [EventDTO] {
         // 全天事件不能按本地时刻比：它存的是 UTC 午夜，东八区里一个
         // 「9 月 21 日」的全天事件会同时落进 21 日和 22 日的日视图。见 AllDayDates。
-        let cal = Calendar.current
+        let cal = viewingCalendar
         return state.visibleEvents(events)
             .filter { AllDayDates.occupies($0, localDay: day, calendar: cal) }
             .sorted { $0.startsAt < $1.startsAt }
@@ -895,7 +1042,7 @@ struct CalendarView: View {
     /// The single wide window we refetch into. All views filter from
     /// this in-memory set.
     private func currentWindow() -> (Date, Date) {
-        let cal = Calendar.current
+        let cal = viewingCalendar
         let start = cal.date(byAdding: .month, value: -Self.windowMonthsBack, to: anchor) ?? anchor
         let end = cal.date(byAdding: .month, value: Self.windowMonthsForward, to: anchor) ?? anchor
         let rolling = (cal.startOfDay(for: start), cal.startOfDay(for: end))
@@ -1322,7 +1469,7 @@ struct CalendarView: View {
             // queue up. We only re-schedule on substantial loads (day view
             // fetches just one day → we'd lose the rest); skip when the
             // window is < 2 days to avoid clearing the long-range schedule.
-            let windowDays = Calendar.current.dateComponents([.day], from: from, to: to).day ?? 0
+            let windowDays = viewingCalendar.dateComponents([.day], from: from, to: to).day ?? 0
             if windowDays >= 2, let profileId = state.activeProfileId {
                 // 只给**看得见**的日历排提醒。以前传的是全部事件，于是用户在
                 // 「筛选日历」里隐藏掉的日历，界面上看不见了、到点照样弹 ——
@@ -1532,12 +1679,14 @@ private struct MiniMonthView: View {
     let anchor: Date
     let onSelect: (Date) -> Void
 
-    private let calendar: Calendar = {
+    @Environment(\.timeZone) private var displayZone
+    private var calendar: Calendar {
         var c = Calendar(identifier: .gregorian)
+        c.timeZone = displayZone
         c.firstWeekday = 2  // Monday-first to match the rest of the app
         c.locale = Locale.current
         return c
-    }()
+    }
 
     private var monthStart: Date {
         calendar.dateInterval(of: .month, for: anchor)?.start ?? anchor
@@ -1557,6 +1706,7 @@ private struct MiniMonthView: View {
     private var monthTitle: String {
         let f = DateFormatter()
         f.locale = Locale.current
+        f.timeZone = displayZone
         f.setLocalizedDateFormatFromTemplate("yMMMM")
         return f.string(from: anchor)
     }

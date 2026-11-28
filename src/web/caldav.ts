@@ -17,6 +17,7 @@ import { notifyEventInvitation } from "../lib/invite_notify.js";
 import { notifyEventUpdated } from "../lib/event_change_notify.js";
 import { calendarCtags, etagOf } from "../lib/calendar_ctag.js";
 import { exportTimeZone } from "../lib/event_zone.js";
+import { canonicalTimeZone } from "../lib/zoned_time.js";
 
 // ---------- XML helpers ----------
 
@@ -345,6 +346,7 @@ function rowToIcal(row: schema.Event, calendarTimezone: string | null): IcalEven
     attendees?: unknown;
     organizer?: string | null;
     timezone?: string | null;
+    endTimezone?: string | null;
     alarms?: unknown;
     transp?: string | null;
     status?: string | null;
@@ -364,6 +366,7 @@ function rowToIcal(row: schema.Event, calendarTimezone: string | null): IcalEven
     allDay: row.allDay,
     rrule: row.rrule,
     exdates: Array.isArray(row.exdates) ? (row.exdates as string[]) : null,
+    endTimezone: extra?.endTimezone ?? null,
     // Carry the event's IANA zone through to serializeEvent so CalDAV
     // clients see DTSTART;TZID=Asia/Shanghai:… (wall-clock) instead of
     // DTSTART:…Z. Makes the event display correctly when the recipient
@@ -1198,6 +1201,9 @@ async function putEvent(req: FastifyRequest, reply: FastifyReply) {
     // lose its "anchored to wall-clock" semantics — re-export would show
     // the wrong time on phones in other zones.
     if (parsed.timezone) extraPatch.timezone = parsed.timezone;
+    const arrivalZone = canonicalTimeZone(parsed.endTimezone);
+    if (arrivalZone) extraPatch.endTimezone = arrivalZone;
+    else delete extraPatch.endTimezone;
 
     // EXDATE merge: take the union of whatever the client sent and what
     // we already have. A "delete just this occurrence" on the phone

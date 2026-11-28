@@ -72,6 +72,7 @@ struct EventEditView: View {
     let prefilledStart: Date?
     let onSaved: (EventDTO) -> Void
     let onCancel: () -> Void
+    @State private var civilTimeZone: TimeZone
 
     @EnvironmentObject var state: AppState
     @Environment(\.timeZone) private var displayTimeZone
@@ -91,10 +92,20 @@ struct EventEditView: View {
     @State private var endsAt: Date
     @State private var allDay: Bool
     @State private var calendarId: String
-    // Recurrence/calendar timezone metadata. DatePicker displays the device
-    // zone and keeps Date instants; this field never reinterprets its clock.
-    // "(默认)" lets the server use the calendar's stored timezone.
+    // Each picker presents the same absolute Date in its endpoint's zone.
+    // The start zone also remains the existing recurrence anchor metadata.
     @State private var timezone: String = TimeZone.current.identifier
+    @State private var endTimezone: String = TimeZone.current.identifier
+    @State private var endpointZonesEdited = false
+    @State private var endZoneLinkedToStart = true
+    private struct TimedSelection {
+        let start: Date
+        let end: Date
+        let civilStart: Date
+        let civilEnd: Date
+        let endLinked: Bool
+    }
+    @State private var timedSelectionBeforeAllDay: TimedSelection?
     // v1.3.3 — Meeting/document URL, stored at extra.url server-side.
     @State private var url: String = ""
     // Optional meeting passcode, stored at extra.meetingPassword server-side.
@@ -128,9 +139,9 @@ struct EventEditView: View {
     // form differs from the seed snapshot, and swipe-to-dismiss is
     // disabled while dirty so a stray drag can't lose an edit.
     @State private var showDiscardConfirm = false
-    private let snapshot: FormSnapshot
+    @State private var snapshot: FormSnapshot
 
-    /// The form's seed values, captured in init. `isDirty` compares
+    /// The form's seed values, captured for this presentation. `isDirty` compares
     /// the live fields against this — including the quick-add parser's
     /// writes, which go through the same @State fields.
     private struct FormSnapshot: Equatable {
@@ -142,6 +153,7 @@ struct EventEditView: View {
         var allDay: Bool
         var calendarId: String
         var timezone: String
+        var endTimezone: String
         var url: String
         var meetingPassword: String
         var category: String
@@ -154,14 +166,16 @@ struct EventEditView: View {
         FormSnapshot(
             summary: summary, location: location, description: description,
             startsAt: startsAt, endsAt: endsAt, allDay: allDay,
-            calendarId: calendarId, timezone: timezone,
+            calendarId: calendarId, timezone: timezone, endTimezone: endTimezone,
             url: url, meetingPassword: meetingPassword,
             category: category, reminder: reminder,
             rruleBuilt: rruleState.build(), exdates: exdates,
         )
     }
 
-    private var isDirty: Bool { currentSnapshot != snapshot }
+    private var isDirty: Bool {
+        currentSnapshot != snapshot || (!allDay && endpointZonesEdited && endZoneLinkedToStart && mode.existing?.extra?.endTimezone != nil)
+    }
 
     /// The recurrence editor only runs where the whole series is the
     /// subject: creating, or editing with no scope / series scope.
@@ -233,6 +247,10 @@ struct EventEditView: View {
         self.prefilledStart = prefilledStart
         self.onSaved = onSaved
         self.onCancel = onCancel
+        let deviceZone = TimeZone.current
+        _civilTimeZone = State(initialValue: deviceZone)
+        var pickerCalendar = Calendar(identifier: .gregorian)
+        pickerCalendar.timeZone = deviceZone
         if let e = mode.seed {
             // For "duplicate" we want today's slot, not the source's
             // possibly-historical start. Edit keeps the original time.
@@ -240,12 +258,18 @@ struct EventEditView: View {
             let seedStart: Date
             let seedEnd: Date
             if useOriginalTime {
-                seedStart = e.allDay ? EventEditorDates.localAllDay(e.startsAt) : e.startsAt
-                seedEnd = e.allDay ? EventEditorDates.localAllDay(e.endsAt) : e.endsAt
+                if e.allDay {
+                    let dates = EventEditorDates.allDayEditorRange(start: e.startsAt, end: e.endsAt, calendar: pickerCalendar)
+                    seedStart = dates.start
+                    seedEnd = dates.end
+                } else {
+                    seedStart = e.startsAt
+                    seedEnd = e.endsAt
+                }
             } else {
                 (seedStart, seedEnd) = EventEditorDates.duplicate(
                     start: e.startsAt, end: e.endsAt, allDay: e.allDay,
-                    from: Self.roundUpToHalfHour(Date()))
+                    from: Self.roundUpToHalfHour(Date()), calendar: pickerCalendar)
             }
             _summary = State(initialValue: e.summary)
             _location = State(initialValue: e.location ?? "")
@@ -254,14 +278,16 @@ struct EventEditView: View {
             _endsAt = State(initialValue: seedEnd)
             _allDay = State(initialValue: e.allDay)
             _calendarId = State(initialValue: e.calendarId)
-            // Preload timezone from the server's extra JSONB. Attendees
-            // are not preloaded here — they live on the dedicated
-            // AttendeesPage which fetches them fresh each open.
-            let seedTimezone = (e.extra?.timezone?.isEmpty == false)
-                ? e.extra!.timezone! : TimeZone.current.identifier
-            if seedTimezone != TimeZone.current.identifier {
-                _timezone = State(initialValue: seedTimezone)
-            }
+            let zones = EventEditorDates.endpointTimeZones(
+                start: e.extra?.timezone, end: e.extra?.endTimezone,
+                calendar: calendars.first(where: { $0.id == e.calendarId })?.timezone,
+                device: .current
+            )
+            let seedTimezone = zones.start.identifier
+            let seedEndTimezone = zones.end.identifier
+            _timezone = State(initialValue: seedTimezone)
+            _endTimezone = State(initialValue: seedEndTimezone)
+            _endZoneLinkedToStart = State(initialValue: zones.end.identifier == zones.start.identifier)
             // Preload URL from extra. Existing events created on the web
             // (where the link field has been live for a while) will have
             // this populated; new iOS-created events start empty.
@@ -310,7 +336,7 @@ struct EventEditView: View {
                 summary: e.summary, location: e.location ?? "",
                 description: e.description ?? "",
                 startsAt: seedStart, endsAt: seedEnd, allDay: e.allDay,
-                calendarId: e.calendarId, timezone: seedTimezone,
+                calendarId: e.calendarId, timezone: seedTimezone, endTimezone: seedEndTimezone,
                 url: seedURL, meetingPassword: seedPassword,
                 category: seedCategory, reminder: primary,
                 rruleBuilt: seedRrule.build(), exdates: seedExdates,
@@ -336,13 +362,20 @@ struct EventEditView: View {
                 calendars.first(where: { $0.id == lastUsed })?.id
                     ?? calendars.first?.id ?? ""
             _calendarId = State(initialValue: initialCalendarId)
+            let zones = EventEditorDates.endpointTimeZones(
+                start: nil, end: nil,
+                calendar: calendars.first(where: { $0.id == initialCalendarId })?.timezone,
+                device: .current
+            )
+            _timezone = State(initialValue: zones.start.identifier)
+            _endTimezone = State(initialValue: zones.end.identifier)
             let freshRrule = RruleState.parse(nil, seedStart: start)
             _rruleState = State(initialValue: freshRrule)
             snapshot = FormSnapshot(
                 summary: "", location: "", description: "",
                 startsAt: start, endsAt: start.addingTimeInterval(3600),
                 allDay: false, calendarId: initialCalendarId,
-                timezone: TimeZone.current.identifier,
+                timezone: zones.start.identifier, endTimezone: zones.end.identifier,
                 url: "", meetingPassword: "", category: "", reminder: "",
                 rruleBuilt: freshRrule.build(), exdates: [],
             )
@@ -437,29 +470,43 @@ struct EventEditView: View {
                         }
                     }
                     .pickerStyle(.menu)
+                    .onChange(of: calendarId) { _, value in
+                        guard mode.seed == nil, !endpointZonesEdited else { return }
+                        let zones = EventEditorDates.endpointTimeZones(
+                            start: nil, end: nil,
+                            calendar: calendars.first(where: { $0.id == value })?.timezone,
+                            device: displayTimeZone
+                        )
+                        timezone = zones.start.identifier
+                        endTimezone = zones.end.identifier
+                    }
                 }
             }
 
             Section("时间") {
-                Toggle("全天", isOn: $allDay)
+                Toggle("全天", isOn: allDayBinding)
                 if allDay {
                     DatePicker("开始", selection: $startsAt, displayedComponents: .date)
-                    DatePicker("结束", selection: $endsAt, in: startsAt..., displayedComponents: .date)
+                        .environment(\.timeZone, civilTimeZone)
+                    DatePicker("结束", selection: $endsAt, displayedComponents: .date)
+                        .environment(\.timeZone, civilTimeZone)
                 } else {
-                    DatePicker("开始", selection: $startsAt, displayedComponents: [.date, .hourAndMinute])
-                        .onChange(of: startsAt) { _, new in
-                            // Web-style linkage: shift end by the same delta as start
-                            // until the user manually touches end.
-                            if endLinkedToStart, let oldStart = oldStartValue {
-                                let delta = new.timeIntervalSince(oldStart)
-                                if abs(delta) > 1 { endsAt = endsAt.addingTimeInterval(delta) }
-                            }
-                            oldStartValue = new
-                        }
-                    DatePicker("结束", selection: $endsAt, in: startsAt..., displayedComponents: [.date, .hourAndMinute])
-                        .onChange(of: endsAt) { _, _ in
-                            endLinkedToStart = false
-                        }
+                    DatePicker("开始", selection: startTimeBinding, displayedComponents: [.date, .hourAndMinute])
+                        .environment(\.timeZone, startZone)
+                        .accessibilityIdentifier("event.startsAt")
+                    endpointZoneLink("event.timezone.start", selection: startZoneBinding, date: startsAt)
+                    repeatedTimePicker(for: startsAt, zone: startZone, selection: startTimeBinding)
+                    DatePicker("结束", selection: endTimeBinding, displayedComponents: [.date, .hourAndMinute])
+                        .environment(\.timeZone, endZone)
+                        .accessibilityIdentifier("event.endsAt")
+                    endpointZoneLink("event.timezone.end", selection: endZoneBinding, date: endsAt)
+                    repeatedTimePicker(for: endsAt, zone: endZone, selection: endTimeBinding)
+                    Text("event.timezone.keepsInstant".loc)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                    if chronological {
+                        LabeledContent("event.timezone.elapsed".loc, value: elapsedTime)
+                    }
                     // 时长快捷片：点一下把结束设成开始 + 片上时长。
                     // 设完即解除「结束跟随开始」的联动（用户已显式定过
                     // 结束时间，再拖开始不该把它冲掉）。
@@ -471,21 +518,18 @@ struct EventEditView: View {
                             Button(durationChipLabel(minutes)) {
                                 endsAt = startsAt.addingTimeInterval(TimeInterval(minutes * 60))
                                 endLinkedToStart = false
+                                conflictCheckPassed = false
                             }
                             .buttonStyle(.bordered)
                             .controlSize(.small)
                         }
                     }
-                    // Timezone picker — only meaningful for timed events.
-                    // All-day events span the calendar's local day per ICS
-                    // spec, so the field would be misleading.
-                    LabeledContent("显示时区", value: displayTimeZone.identifier)
-                    Picker("日程时区", selection: $timezone) {
-                        ForEach(pickerTimezones, id: \.self) { tz in
-                            Text(tz).tag(tz)
-                        }
-                    }
-                    .pickerStyle(.menu)
+
+                }
+                if !dateOrderIsValid {
+                    Text(dateOrderError)
+                        .font(.footnote)
+                        .foregroundStyle(.red)
                 }
             }
 
@@ -813,11 +857,8 @@ struct EventEditView: View {
                         Text(mode.isCreate ? "创建" : "保存").bold()
                     }
                 }
-                .disabled(saving || summary.trimmingCharacters(in: .whitespaces).isEmpty || calendarId.isEmpty)
+                .disabled(saving || summary.trimmingCharacters(in: .whitespaces).isEmpty || calendarId.isEmpty || !dateOrderIsValid)
             }
-        }
-        .onAppear {
-            oldStartValue = startsAt
         }
         .alert("app.js.conflict.title".loc, isPresented: Binding(
             get: { conflictPrompt != nil },
@@ -1012,9 +1053,133 @@ struct EventEditView: View {
         }
     }
 
-    // Used by the .onChange handler to compute the start-time delta and
-    // shift end accordingly. Tracks the value seen at the previous frame.
-    @State private var oldStartValue: Date?
+    private var startZone: TimeZone { TimeZone(identifier: timezone) ?? displayTimeZone }
+    private var endZone: TimeZone { TimeZone(identifier: endTimezone) ?? startZone }
+    private var chronological: Bool { EventEditorDates.isChronological(start: startsAt, end: endsAt) }
+
+    private var civilCalendar: Calendar {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = civilTimeZone
+        return calendar
+    }
+
+    private var dateOrderIsValid: Bool {
+        allDay ? EventEditorDates.isChronological(start: civilCalendar.startOfDay(for: startsAt), end: civilCalendar.startOfDay(for: endsAt)) : chronological
+    }
+
+    private var dateOrderError: String {
+        (allDay ? "event.timezone.invalidDates" : "event.timezone.invalidOrder").loc
+    }
+
+    private var allDayBinding: Binding<Bool> {
+        Binding(get: { allDay }, set: { value in
+            guard value != allDay else { return }
+            if value {
+                guard let dates = EventEditorDates.allDayFromTimed(start: startsAt, end: endsAt,
+                    startZone: startZone, endZone: endZone, pickerCalendar: civilCalendar) else {
+                    errorMessage = "event.timezone.invalidLocalDate".loc
+                    return
+                }
+                timedSelectionBeforeAllDay = TimedSelection(start: startsAt, end: endsAt,
+                    civilStart: dates.start, civilEnd: dates.end, endLinked: endLinkedToStart)
+                startsAt = dates.start
+                endsAt = dates.end
+            } else {
+                if let saved = timedSelectionBeforeAllDay,
+                   civilCalendar.isDate(startsAt, inSameDayAs: saved.civilStart),
+                   civilCalendar.isDate(endsAt, inSameDayAs: saved.civilEnd) {
+                    startsAt = saved.start
+                    endsAt = saved.end
+                    endLinkedToStart = saved.endLinked
+                } else {
+                    guard let dates = EventEditorDates.timedFromAllDay(start: startsAt, end: endsAt,
+                        pickerCalendar: civilCalendar, startZone: startZone, endZone: endZone) else {
+                        errorMessage = "event.timezone.invalidLocalDate".loc
+                        return
+                    }
+                    startsAt = dates.start
+                    endsAt = dates.end
+                    endLinkedToStart = false
+                }
+                timedSelectionBeforeAllDay = nil
+            }
+            allDay = value
+            conflictCheckPassed = false
+        })
+    }
+
+    private var startZoneBinding: Binding<String> {
+        Binding(get: { timezone }, set: { value in
+            timezone = value
+            if endZoneLinkedToStart || endTimezone == value {
+                endTimezone = value
+                endZoneLinkedToStart = true
+            }
+            endpointZonesEdited = true
+        })
+    }
+
+    private var endZoneBinding: Binding<String> {
+        Binding(get: { endTimezone }, set: { value in
+            endTimezone = value
+            endZoneLinkedToStart = value == timezone
+            endpointZonesEdited = true
+        })
+    }
+
+    // Binding setters distinguish a direct end edit from the automatic shift
+    // after changing start. An onChange on endsAt cannot make that distinction.
+    private var startTimeBinding: Binding<Date> {
+        Binding(get: { startsAt }, set: { value in
+            let delta = value.timeIntervalSince(startsAt)
+            startsAt = value
+            if endLinkedToStart { endsAt = endsAt.addingTimeInterval(delta) }
+            conflictCheckPassed = false
+        })
+    }
+
+    private var endTimeBinding: Binding<Date> {
+        Binding(get: { endsAt }, set: { value in
+            endsAt = value
+            endLinkedToStart = false
+            conflictCheckPassed = false
+        })
+    }
+
+    private var elapsedTime: String {
+        let formatter = DateComponentsFormatter()
+        formatter.allowedUnits = [.day, .hour, .minute]
+        formatter.unitsStyle = .abbreviated
+        formatter.zeroFormattingBehavior = .dropAll
+        return formatter.string(from: max(0, endsAt.timeIntervalSince(startsAt))) ?? "0"
+    }
+
+    private func endpointZoneLink(_ label: String, selection: Binding<String>, date: Date) -> some View {
+        NavigationLink {
+            EventEndpointZonePicker(title: label, selection: selection, date: date)
+        } label: {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(label.loc)
+                Text("\(DateFormatters.localFormatter("VVV", template: false, zone: TimeZone(identifier: selection.wrappedValue) ?? displayTimeZone).string(from: date)) · \(EventEndpointZonePicker.offsetLabel(TimeZone(identifier: selection.wrappedValue) ?? displayTimeZone, at: date))")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .accessibilityIdentifier(label)
+    }
+
+    @ViewBuilder private func repeatedTimePicker(for date: Date, zone: TimeZone, selection: Binding<Date>) -> some View {
+        let alternatives = EventEditorDates.repeatedTimeAlternatives(for: date, in: zone)
+        if alternatives.count > 1 {
+            Picker("event.timezone.repeatedTime".loc, selection: selection) {
+                ForEach(alternatives, id: \.self) { candidate in
+                    Text(EventEndpointZonePicker.offsetLabel(zone, at: candidate)).tag(candidate)
+                }
+            }
+            .pickerStyle(.segmented)
+        }
+    }
 
     /// One parsed quick-add phrase, normalized across both parse paths
     /// (on-device model / server parser) so the fill logic is shared.
@@ -1049,13 +1214,14 @@ struct EventEditView: View {
         // NOT to its own clock (server may be in another timezone).
         let f = DateFormatter()
         f.locale = Locale(identifier: "en_US_POSIX")
-        f.timeZone = .current
+        f.timeZone = allDay ? civilTimeZone : startZone
         f.dateFormat = "yyyy-MM-dd'T'HH:mm:ss"
         do {
             let parsed = try await APIClient(state: state)
                 .parseQuickEvent(text: text, now: f.string(from: Date()))
-            guard let s = QuickParsedEvent.localDate(parsed.startsAt),
-                  let e = QuickParsedEvent.localDate(parsed.endsAt)
+            let parsedZone = (parsed.allDay ?? false) ? civilTimeZone : startZone
+            guard let s = QuickParsedEvent.localDate(parsed.startsAt, in: parsedZone),
+                  let e = QuickParsedEvent.localDate(parsed.endsAt, in: parsedZone)
             else {
                 quickError = "没看懂，换个说法试试".loc
                 return
@@ -1089,6 +1255,7 @@ struct EventEditView: View {
             if let loc = fill.location?.trimmingCharacters(in: .whitespaces), !loc.isEmpty {
                 location = loc
             }
+            timedSelectionBeforeAllDay = nil
             allDay = fill.allDay
             startsAt = fill.start
             endsAt = max(fill.end, fill.start.addingTimeInterval(60))
@@ -1102,7 +1269,6 @@ struct EventEditView: View {
             // The user got an explicit end from the parser — break the
             // start→end linkage so tweaking start won't shift it again.
             endLinkedToStart = false
-            oldStartValue = fill.start
         }
         // 标题解析出来了才算完整：只有时间没标题不给直接保存。
         quickFilled = !fill.summary.trimmingCharacters(in: .whitespaces).isEmpty
@@ -1119,10 +1285,11 @@ struct EventEditView: View {
         guard SystemLanguageModel.default.availability == .available else { return nil }
         let f = DateFormatter()
         f.locale = Locale(identifier: "en_US_POSIX")
-        f.timeZone = .current
+        f.timeZone = allDay ? civilTimeZone : startZone
         f.dateFormat = "yyyy-MM-dd'T'HH:mm:ss"
         let weekdayFmt = DateFormatter()
         weekdayFmt.locale = Locale(identifier: "zh_CN")
+        weekdayFmt.timeZone = allDay ? civilTimeZone : startZone
         weekdayFmt.dateFormat = "EEEE"
         let now = Date()
         let instructions = """
@@ -1134,8 +1301,9 @@ struct EventEditView: View {
         do {
             let session = LanguageModelSession(instructions: instructions)
             let r = try await session.respond(to: text, generating: AIQuickEvent.self)
-            guard let s = QuickParsedEvent.localDate(r.content.startsAt),
-                  let e = QuickParsedEvent.localDate(r.content.endsAt),
+            let parsedZone = r.content.allDay ? civilTimeZone : startZone
+            guard let s = QuickParsedEvent.localDate(r.content.startsAt, in: parsedZone),
+                  let e = QuickParsedEvent.localDate(r.content.endsAt, in: parsedZone),
                   !r.content.summary.trimmingCharacters(in: .whitespaces).isEmpty,
                   // Sanity: reject hallucinated past dates (>1 day behind now).
                   s > now.addingTimeInterval(-86_400)
@@ -1273,6 +1441,11 @@ struct EventEditView: View {
         errorMessage = nil
         defer { saving = false }
 
+        guard dateOrderIsValid else {
+            errorMessage = dateOrderError
+            saveViaQuick = false
+            return
+        }
         let isoStart = iso(startsAt, allDay: allDay, isStart: true)
         let isoEnd = iso(endsAt, allDay: allDay, isStart: false)
         let extra = buildExtra()
@@ -1350,8 +1523,8 @@ struct EventEditView: View {
                     summary: summary.trimmingCharacters(in: .whitespaces),
                     description: description,
                     location: location,
-                    startsAt: isoStart,
-                    endsAt: isoEnd,
+                    startsAt: startsAt == snapshot.startsAt && allDay == snapshot.allDay ? nil : isoStart,
+                    endsAt: endsAt == snapshot.endsAt && allDay == snapshot.allDay ? nil : isoEnd,
                     allDay: allDay,
                     rrule: rruleToSend,
                     extra: extra,
@@ -1466,7 +1639,7 @@ struct EventEditView: View {
         return EventExtra(
             // 全天事件这个界面不提供时区选择，所以它不是「被清空」而是「不归我管」。
             // 写成清空会把别的端设的时区删掉，而服务端算全天事件的提醒正要用它。
-            timezone: allDay ? .unmanaged : field(timezone.isEmpty ? nil : timezone),
+            timezone: startZoneField(),
             // 参与者有自己的页面和接口 —— 在这里发 null 等于把别人
             // 设的东西抹掉。分类不同：这个界面现在有分类选择器，
             // 走 field() 同一口径（选「无」= 清空，发显式 null）。
@@ -1475,7 +1648,33 @@ struct EventEditView: View {
             url: field(trimmedURL.isEmpty ? nil : trimmedURL),
             meetingPassword: field(trimmedPassword.isEmpty ? nil : trimmedPassword),
             alarms: alarmsField(extraLoaded: extraLoaded),
+            endTimezone: endZoneField()
         )
+    }
+
+    private var endpointFieldsChanged: Bool {
+        endpointZonesEdited || timezone != snapshot.timezone || endTimezone != snapshot.endTimezone ||
+            calendarId != snapshot.calendarId || allDay != snapshot.allDay ||
+            startsAt != snapshot.startsAt || endsAt != snapshot.endsAt
+    }
+
+    private func startZoneField() -> ExtraField<String> {
+        guard !allDay else { return .unmanaged }
+        let storedStart = mode.existing?.extra?.timezone.flatMap { TimeZone(identifier: $0) }
+        guard isNewEvent || timezone != snapshot.timezone || calendarId != snapshot.calendarId ||
+                (storedStart == nil && endpointFieldsChanged) else { return .unmanaged }
+        return .value(timezone)
+    }
+
+    private func endZoneField() -> ExtraField<String> {
+        guard !allDay else { return .unmanaged }
+        if endZoneLinkedToStart || endTimezone == timezone {
+            // New same-zone events inherit start. Switching an old independent
+            // destination back to start removes its explicit override.
+            return !isNewEvent && endpointFieldsChanged && mode.existing?.extra?.endTimezone != nil ? .cleared : .unmanaged
+        }
+        guard isNewEvent || endTimezone != snapshot.endTimezone || calendarId != snapshot.calendarId || allDay != snapshot.allDay else { return .unmanaged }
+        return .value(endTimezone)
     }
 
     /// 拼 extra.alarms：选择器选中的一条 + 既有 alarms 里不归选择器管的那些。
@@ -1509,22 +1708,6 @@ struct EventEditView: View {
         return combined.isEmpty ? .cleared : .value(combined)
     }
 
-    /// Picker options for THIS event: the common shortlist plus the
-    /// event's own zone when it isn't in the shortlist, so the Picker
-    /// can always represent the current value faithfully. Without
-    /// this, an event anchored outside the 20-zone shortlist (e.g.
-    /// America/Denver, set on the web) rendered a blank selection —
-    /// the same silent-substitution bug EditCalendarView already
-    /// fixed for calendars. The zone only changes when the user
-    /// actually picks another row.
-    private var pickerTimezones: [String] {
-        var list = Self.commonTimezones
-        if !timezone.isEmpty && !list.contains(timezone) {
-            list.append(timezone)
-        }
-        return list
-    }
-
     /// Top-of-list candidate timezones for the picker. The system tz is
     /// inserted at index 0 (if not already present) so 「上海开发者」
     /// gets Asia/Shanghai as default. Full IANA list would be 500+ rows
@@ -1536,7 +1719,7 @@ struct EventEditView: View {
             "Asia/Seoul", "Asia/Taipei", "Asia/Bangkok", "Asia/Kolkata",
             "Asia/Dubai", "Europe/London", "Europe/Berlin", "Europe/Paris",
             "Europe/Moscow", "America/New_York", "America/Chicago",
-            "America/Los_Angeles", "America/Sao_Paulo", "Australia/Sydney",
+            "America/Los_Angeles", "America/Sao_Paulo", "Australia/Melbourne", "Australia/Sydney",
             "Pacific/Auckland", "UTC",
         ]
         let current = TimeZone.current.identifier
@@ -1549,7 +1732,7 @@ struct EventEditView: View {
             // Match the web's all-day convention: UTC midnight for the
             // calendar date the user picked. Server interprets the date
             // portion only.
-            let cal = Calendar.current
+            let cal = civilCalendar
             var comps = cal.dateComponents([.year, .month, .day], from: d)
             comps.hour = isStart ? 0 : 23
             comps.minute = isStart ? 0 : 59
@@ -1569,5 +1752,81 @@ struct EventEditView: View {
         if m >= 30 { comps.hour = (comps.hour ?? 0) + 1 }
         comps.second = 0
         return cal.date(from: comps) ?? d
+    }
+}
+
+private struct EventEndpointZonePicker: View {
+    let title: String
+    @Binding var selection: String
+    let date: Date
+    @State private var search = ""
+    @Environment(\.dismiss) private var dismiss
+
+    @Environment(\.locale) private var locale
+    @State private var entries: [Entry] = []
+
+    private struct Entry: Identifiable {
+        let id: String
+        let city: String
+        let name: String
+        let offset: String
+    }
+
+    private var filtered: [Entry] {
+        let query = search.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty else { return entries }
+        return entries.filter {
+            $0.id.replacingOccurrences(of: "_", with: " ").localizedCaseInsensitiveContains(query) ||
+                $0.city.localizedCaseInsensitiveContains(query) ||
+                $0.name.localizedCaseInsensitiveContains(query)
+        }
+    }
+
+    var body: some View {
+        List(filtered) { entry in
+            Button {
+                selection = entry.id
+                dismiss()
+            } label: {
+                HStack(alignment: .top) {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("\(entry.city) · \(entry.offset)")
+                            .foregroundStyle(.primary)
+                        Text("\(entry.name) · \(entry.id)")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    Spacer(minLength: 4)
+                    if entry.id == selection { Image(systemName: "checkmark") }
+                }
+                .frame(minHeight: 44)
+                .contentShape(Rectangle())
+            }
+            .accessibilityAddTraits(entry.id == selection ? .isSelected : [])
+        }
+        .navigationTitle(title.loc)
+        .navigationBarTitleDisplayMode(.inline)
+        .searchable(text: $search, prompt: Text("event.timezone.search".loc))
+        .task(id: locale.identifier) {
+            // Build names once when this picker opens (or the locale changes),
+            // not for every search keystroke or each scrolling row render.
+            let identifiers = Set(TimeZone.knownTimeZoneIdentifiers + EventEditView.commonTimezones + [selection])
+            entries = identifiers.compactMap { identifier in
+                guard let zone = TimeZone(identifier: identifier) else { return nil }
+                return Entry(id: identifier,
+                    city: DateFormatters.localFormatter("VVV", template: false, zone: zone).string(from: date),
+                    name: zone.localizedName(for: .generic, locale: locale) ?? identifier,
+                    offset: Self.offsetLabel(zone, at: date))
+            }.sorted { lhs, rhs in
+                lhs.city == rhs.city ? lhs.id < rhs.id : lhs.city.localizedStandardCompare(rhs.city) == .orderedAscending
+            }
+        }
+    }
+
+    static func offsetLabel(_ zone: TimeZone, at date: Date) -> String {
+        let seconds = zone.secondsFromGMT(for: date)
+        let absolute = abs(seconds)
+        return String(format: "UTC%@%02d:%02d", seconds < 0 ? "−" : "+", absolute / 3600, absolute % 3600 / 60)
     }
 }

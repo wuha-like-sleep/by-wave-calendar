@@ -129,6 +129,7 @@ export function mergeImportExtra(
     transp?: string | null;
     status?: string | null;
     url?: string | null;
+    endTimezone?: string | null;
   } | null = null,
 ): Record<string, unknown> | null {
   const base = existingExtra && typeof existingExtra === "object" && !Array.isArray(existingExtra)
@@ -149,6 +150,9 @@ export function mergeImportExtra(
     if (fidelity.transp) base.transp = fidelity.transp;
     if (fidelity.status) base.status = fidelity.status;
     if (fidelity.url) base.url = fidelity.url;
+    const endZone = canonicalTimeZone(fidelity.endTimezone);
+    if (endZone) base.endTimezone = endZone;
+    else if (fidelity.endTimezone === null) delete base.endTimezone;
   }
   return Object.keys(base).length ? base : null;
 }
@@ -371,6 +375,7 @@ async function planImport(
       transp: ev.transp ?? null,
       status: ev.status ?? null,
       url: ev.url ?? null,
+      endTimezone: ev.endTimezone ?? null,
     });
     // 这次刷新 / 重新导入把展开时区换了（升级后第一次刷新补上源时区就是这样）：用户在我们这边
     // 「删掉这一次」记下的那几次要跟着对过去，不然删过的又冒出来。规则是上游给的，UNTIL 不替它挪。

@@ -5,6 +5,7 @@
 import SwiftUI
 
 struct EventRowView: View {
+    @Environment(\.timeZone) private var displayZone
     let event: EventDTO
     let calendar: CalendarMeta?
     // Show the full calendar date in the time line. Day/Week lists leave
@@ -128,17 +129,19 @@ struct EventRowView: View {
             let last = f.string(from: AllDayDates.lastInclusiveUTCDay(of: event))
             return start + " – " + last + " · " + "全天".loc
         }
-        let sameDay = Calendar.current.isDate(event.startsAt, inSameDayAs: event.endsAt)
+        var displayCalendar = Calendar.current
+        displayCalendar.timeZone = displayZone
+        let sameDay = displayCalendar.isDate(event.startsAt, inSameDayAs: event.endsAt)
         // In search (showsDate) a same-day event still needs its date —
         // the result could be any day. dateTimeShort already carries the
         // M/D, so we just prepend the start date and keep the end as a
         // plain time when it's the same day.
         if showsDate, sameDay {
-            let day = DateFormatters.monthDay.string(from: event.startsAt)
-            let t = DateFormatters.timeShort
+            let day = DateFormatters.localFormatter("MMMd", template: true, zone: displayZone).string(from: event.startsAt)
+            let t = DateFormatters.localFormatter("HH:mm", template: false, zone: displayZone)
             return day + " " + t.string(from: event.startsAt) + " – " + t.string(from: event.endsAt)
         }
-        let f = sameDay ? DateFormatters.timeShort : DateFormatters.dateTimeShort
+        let f = DateFormatters.localFormatter(sameDay ? "HH:mm" : "MdHm", template: !sameDay, zone: displayZone)
         return f.string(from: event.startsAt) + " – " + f.string(from: event.endsAt)
     }
 }

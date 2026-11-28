@@ -5,9 +5,10 @@ import SwiftUI
 struct MainTabView<CalendarContent: View, CalendarTools: View>: View {
     @EnvironmentObject var state: AppState
     @Environment(\.horizontalSizeClass) private var sizeClass
-    @Binding var sidebarCollapsed: Bool
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @State private var sidebarCollapsed = false
     let pendingInvitationCount: Int
-    @ViewBuilder let calendar: () -> CalendarContent
+    @ViewBuilder let calendar: (CalendarNavigationLayout) -> CalendarContent
     @ViewBuilder let calendarTools: () -> CalendarTools
 
     enum Tab: CaseIterable {
@@ -39,19 +40,24 @@ struct MainTabView<CalendarContent: View, CalendarTools: View>: View {
 
     var body: some View {
         GeometryReader { geometry in
+            let layout = CalendarNavigationLayout(width: geometry.size.width, regular: sizeClass == .regular,
+                                                  accessibilityText: dynamicTypeSize.isAccessibilitySize,
+                                                  collapsed: sidebarCollapsed)
             let fallbackRail = needsLegacyRail(size: geometry.size)
             HStack(spacing: 0) {
-                if sizeClass == .regular {
+                if let width = layout.width {
                     VStack(spacing: 0) {
-                        Button {
-                            sidebarCollapsed.toggle()
-                        } label: {
-                            Image(systemName: "sidebar.leading")
-                                .frame(width: 44, height: 44)
+                        if layout.canToggle {
+                            Button {
+                                sidebarCollapsed.toggle()
+                            } label: {
+                                Image(systemName: "sidebar.leading")
+                                    .frame(width: 44, height: 44)
+                            }
+                            .accessibilityLabel(Text("切换侧边栏"))
+                            .frame(maxWidth: .infinity, alignment: .leading)
                         }
-                        .accessibilityLabel(Text("切换侧边栏"))
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        if sidebarCollapsed {
+                        if !layout.showsCalendarTools {
                             ScrollView { railButtons }.scrollIndicators(.hidden)
                         } else {
                             List {
@@ -63,12 +69,12 @@ struct MainTabView<CalendarContent: View, CalendarTools: View>: View {
                             .listStyle(.sidebar)
                         }
                     }
-                    .frame(width: sidebarCollapsed ? 62 : min(310, max(218, geometry.size.width * 0.30)))
+                    .frame(width: width)
                     .frame(maxHeight: .infinity, alignment: .top)
                     .background(Color(.secondarySystemGroupedBackground))
                     Divider()
                 }
-                tabs(hideBar: sizeClass == .regular || fallbackRail)
+                tabs(layout, hideBar: layout.width != nil || fallbackRail)
                 if fallbackRail {
                     ViewThatFits(in: .vertical) {
                         sideRail
@@ -89,10 +95,10 @@ struct MainTabView<CalendarContent: View, CalendarTools: View>: View {
         }
     }
 
-    private func tabs(hideBar: Bool) -> some View {
+    private func tabs(_ layout: CalendarNavigationLayout, hideBar: Bool) -> some View {
         let visibility: Visibility = hideBar ? .hidden : .automatic
         return TabView(selection: $selection) {
-            NavigationStack { calendar() }
+            NavigationStack { calendar(layout) }
                 .toolbar(visibility, for: .tabBar)
                 .tabItem { Tab.calendar.label }
                 .tag(Tab.calendar)

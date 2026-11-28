@@ -98,13 +98,14 @@ struct SearchView: View {
                 NavigationStack {
                     EventDetailView(
                         event: hydrated[r.id] ?? r.toEventDTO(),
-                        calendar: r.calendarMeta(),
+                        calendar: calendars.first { $0.id == r.calendarId } ?? r.calendarMeta(),
                         allCalendars: calendars,
                         onChanged: {
                             // Search result list doesn't auto-refresh after
                             // edit/delete because we don't have an easy way
                             // to know which fields changed. Re-run the
                             // current query.
+                            hydrated[r.id] = nil
                             scheduleSearch(query)
                         },
                     )
